@@ -121,10 +121,11 @@ export async function POST(request: Request) {
     await saveRoom(room); return Response.json({ room: publicRoom(room, payload.token ?? "") });
   }
   if (action === "buyChips") {
-    if (viewer.seated || viewer.chips > 0) return Response.json({ error: "只有观战玩家可以购买下一局筹码" }, { status: 409 });
     const amount = Number(payload.buyIn);
     if (![5000, 10000, 20000].includes(amount)) return Response.json({ error: "无效筹码包" }, { status: 400 });
-    viewer.queuedChips = amount; viewer.readyNextHand = false; await saveRoom(room);
+    viewer.queuedChips += amount;
+    if (!viewer.seated || viewer.chips === 0) viewer.readyNextHand = false;
+    await saveRoom(room);
     return Response.json({ room: publicRoom(room, payload.token ?? "") });
   }
   if (action === "enterNextHand") {
@@ -149,7 +150,11 @@ export async function POST(request: Request) {
   } else if (action === "nextHand") {
     if (!room.game?.winner) return Response.json({ error: "本手尚未结束" }, { status: 409 });
     syncSettledPlayers(room);
-    room.players = room.players.map((player) => player.readyNextHand && player.queuedChips > 0 ? { ...player, chips: player.queuedChips, seated: true, queuedChips: 0, readyNextHand: false } : player);
+    room.players = room.players.map((player) => {
+      if (player.seated && player.chips > 0 && player.queuedChips > 0) return { ...player, chips: player.chips + player.queuedChips, queuedChips: 0 };
+      if (player.readyNextHand && player.queuedChips > 0) return { ...player, chips: player.queuedChips, seated: true, queuedChips: 0, readyNextHand: false };
+      return player;
+    });
     const source = room.players.filter((player) => player.seated && player.chips > 0);
     if (source.length < 2) return Response.json({ error: "至少需要两位玩家进场才能开始下一手" }, { status: 409 });
     room.game = startServerGame(source, room.game.hand + 1, room.game.timeBankUsedAt); room.game = runServerAutomation(room.game);
