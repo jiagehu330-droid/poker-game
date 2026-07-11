@@ -1,0 +1,26 @@
+.table-meta {
+  align-items: center;
+}
+
+.table-meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-meta-actions small {
+  color: #74877e;
+}
+
+.table-meta .end-game {
+  padding: 7px 11px;
+  border: 1px solid rgba(231, 104, 112, .38);
+  border-radius: 8px;
+  background: rgba(231, 104, 112, .08);
+  color: #ef9298;
+  font-weight: 800;
+}
+
+.table-meta .end-game:disabled {
+  opacity: .45;
+}
