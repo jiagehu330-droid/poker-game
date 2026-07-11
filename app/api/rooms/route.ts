@@ -56,7 +56,7 @@ export async function GET(request: Request) {
   const before = found.state.game?.turnSerial;
   if (found.state.game) found.state.game = runServerAutomation(found.state.game);
   if (found.state.game?.turnSerial !== before) await saveRoom(found.state);
-  return Response.json({ room: publicRoom(found.state, token) });
+  return Response.json({ room: publicRoom(found.state, token) }, { headers: { "cache-control": "no-store, no-cache, must-revalidate" } });
 }
 
 export async function POST(request: Request) {
@@ -64,10 +64,12 @@ export async function POST(request: Request) {
   const payload = await request.json() as { action?: string; code?: string; token?: string; name?: string; level?: "简单" | "困难"; playerId?: string; gameAction?: GameAction; raiseTo?: number };
   const action = payload.action ?? "";
   if (action === "create") {
+    const name = payload.name?.trim().slice(0, 12) ?? "";
+    if (!name) return Response.json({ error: "请先填写昵称" }, { status: 400 });
     let code = roomCode();
     while (await findRoom(code)) code = roomCode();
     const token = crypto.randomUUID();
-    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name: payload.name?.trim().slice(0, 12) || "房主", human: true, host: true, level: "困难", chips: 10000 }] };
+    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name, human: true, host: true, level: "困难", chips: 10000 }] };
     await getDb().insert(pokerRooms).values({ code, stateJson: JSON.stringify(room) });
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
   }
@@ -78,15 +80,25 @@ export async function POST(request: Request) {
   const room = found.state;
 
   if (action === "join") {
+    const name = payload.name?.trim().slice(0, 12) ?? "";
+    if (!name) return Response.json({ error: "请先填写昵称" }, { status: 400 });
+    if (room.phase !== "lobby") return Response.json({ error: "牌局已经开始" }, { status: 409 });
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const token = crypto.randomUUID();
-    room.players.push({ id: crypto.randomUUID(), token, name: payload.name?.trim().slice(0, 12) || `玩家${room.players.length + 1}`, human: true, host: false, level: "困难", chips: 10000 });
+    room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000 });
     await saveRoom(room);
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
   }
 
   const viewer = room.players.find((player) => player.token === payload.token);
   if (!viewer) return Response.json({ error: "身份已失效" }, { status: 403 });
+  if (action === "updateName") {
+    const name = payload.name?.trim().slice(0, 12) ?? "";
+    if (!name) return Response.json({ error: "昵称不能为空" }, { status: 400 });
+    if (room.phase !== "lobby") return Response.json({ error: "开局后不能修改昵称" }, { status: 409 });
+    viewer.name = name; await saveRoom(room);
+    return Response.json({ room: publicRoom(room, payload.token ?? "") });
+  }
   if (action === "gameAction" || action === "extendTime") {
     if (!room.game) return Response.json({ error: "牌局尚未开始" }, { status: 409 });
     try { room.game = action === "extendTime" ? extendServerTime(room.game, viewer.id) : serverAction(room.game, viewer.id, payload.gameAction!, payload.raiseTo); room.game = runServerAutomation(room.game); }
