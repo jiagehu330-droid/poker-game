@@ -247,6 +247,12 @@ export default function Home() {
     const sync = async () => {
       try {
         const response = await fetch(`/api/rooms?code=${roomCode}&token=${encodeURIComponent(roomToken)}`, { cache: "no-store" });
+        if (response.status === 403 || response.status === 404) {
+          window.localStorage.removeItem("pocket-poker-session");
+          setOnlineRoom(null); setGame(null); setRoomCode(""); setRoomToken(""); setStage("home");
+          setOnlineError("你已离开该房间");
+          return;
+        }
         if (response.ok) {
           const next = (await response.json()).room as OnlineRoom;
           setOnlineRoom(next);
