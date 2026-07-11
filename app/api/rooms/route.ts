@@ -108,19 +108,27 @@ export async function POST(request: Request) {
   if (!viewer.host) return Response.json({ error: "只有房主可以操作" }, { status: 403 });
 
   if (action === "start") {
+    if (room.phase !== "lobby") return Response.json({ error: "牌局已经开始" }, { status: 409 });
     if (room.players.length < 2) return Response.json({ error: "至少需要两位玩家" }, { status: 409 });
     room.phase = "playing"; room.game = startServerGame(room.players);
     room.game = runServerAutomation(room.game);
+  } else if (action === "endGame") {
+    if (room.phase !== "playing") return Response.json({ error: "当前没有进行中的牌局" }, { status: 409 });
+    room.phase = "lobby";
+    room.game = undefined;
+    room.players = room.players.map((player) => ({ ...player, chips: 10000 }));
   } else if (action === "nextHand") {
     if (!room.game?.winner) return Response.json({ error: "本手尚未结束" }, { status: 409 });
     const source = room.game.players.map(({ id,name,human,host,level,chips })=>({id,name,human,host,level,chips}));
     room.game = startServerGame(source, room.game.hand + 1, room.game.timeBankUsedAt); room.game = runServerAutomation(room.game);
   } else if (action === "addBot") {
+    if (room.phase !== "lobby") return Response.json({ error: "牌局中不能调整座位" }, { status: 409 });
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const botCount = room.players.filter((player) => !player.human).length;
     const names = ["阿策", "小满", "河牌侠", "老K", "桃子"];
     room.players.push({ id: crypto.randomUUID(), token: "", name: names[botCount] ?? `人机${botCount + 1}`, human: false, host: false, level: payload.level ?? "简单", chips: 10000 });
   } else if (action === "removePlayer") {
+    if (room.phase !== "lobby") return Response.json({ error: "牌局中不能调整座位" }, { status: 409 });
     room.players = room.players.filter((player) => player.id !== payload.playerId || player.host);
   } else return Response.json({ error: "未知操作" }, { status: 400 });
 
