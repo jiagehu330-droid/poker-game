@@ -247,7 +247,12 @@ export default function Home() {
     const sync = async () => {
       try {
         const response = await fetch(`/api/rooms?code=${roomCode}&token=${encodeURIComponent(roomToken)}`, { cache: "no-store" });
-        if (response.ok) { const next = (await response.json()).room as OnlineRoom; setOnlineRoom(next); if (next.game) { setGame(next.game); setStage("table"); } }
+        if (response.ok) {
+          const next = (await response.json()).room as OnlineRoom;
+          setOnlineRoom(next);
+          if (next.game) { setGame(next.game); setStage("table"); }
+          else if (next.phase === "lobby") { setGame(null); setStage("lobby"); }
+        }
       } catch { /* 下一次轮询自动重试 */ }
     };
     void sync();
@@ -315,6 +320,17 @@ export default function Home() {
       try { const result = await roomRequest({ action: "removePlayer", code: roomCode, token: roomToken, playerId }); setOnlineRoom(result.room); }
       catch (error) { setOnlineError(error instanceof Error ? error.message : "移除失败"); }
     } else setBots(bots.filter((bot) => bot.id !== playerId));
+  }
+
+  async function endOnlineGame() {
+    if (!onlineRoom?.isHost || !window.confirm("结束当前牌局，让所有玩家返回大厅？")) return;
+    if (actionPending) return;
+    setActionPending(true);
+    try {
+      const result = await roomRequest({ action: "endGame", code: roomCode, token: roomToken });
+      setOnlineRoom(result.room); setGame(null); setStage("lobby");
+    } catch (error) { setOnlineError(error instanceof Error ? error.message : "结束牌局失败"); }
+    finally { setActionPending(false); }
   }
 
   async function copyInvite() {
@@ -390,7 +406,7 @@ export default function Home() {
           <div className="seats-card"><div className="card-title"><span>座位</span><small>{seats.length} / 6</small></div>
             {seats.map((seat, index) => <div className="player-row" key={seat.id}>
               <div className={`avatar avatar-${index}`}>{seat.human ? "人" : "AI"}</div><div className="player-copy"><strong>{seat.name}{seat.host && <i className="identity-tag host-tag">房主</i>}{seat.id === "you" && <i className="identity-tag self-tag">你</i>}</strong><small>{seat.human ? "已准备" : `${seat.level}人机`}</small></div>
-              <span className="chips">{seat.chips.toLocaleString()}</span>{!seat.human && onlineRoom?.isHost && <button className="remove" onClick={() => removeSeat(seat.id)}>移除</button>}
+              <span className="chips">{seat.chips.toLocaleString()}</span>{((onlineRoom?.isHost && seat.id !== "you") || (!onlineRoom && !seat.human)) && <button className="remove" onClick={() => removeSeat(seat.id)}>{seat.human ? "移出" : "移除"}</button>}
             </div>)}
             {Array.from({ length: 6 - seats.length }).map((_, index) => <div className="empty-seat" key={index}><span>+</span>等待玩家加入</div>)}
           </div>
@@ -406,7 +422,7 @@ export default function Home() {
       </section>}
 
       {stage === "table" && game && <section className="table-screen">
-        <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><button onClick={() => setStage("lobby")}>返回房间</button></div>
+        <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><div className="table-meta-actions">{onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局并返回大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}</div></div>
         <div className="round-strip"><span className="live-dot" />{game.winner ? game.winner : actor ? `${actor.name} 正在行动` : "正在推进牌局"}
           {!game.winner && <div className={`turn-timer ${secondsLeft <= 10 ? "urgent" : ""}`}><div><i style={{ width: `${Math.min(100, secondsLeft / 60 * 100)}%` }} /></div><b>{secondsLeft}s</b></div>}
           <small>底池 {game.pot.toLocaleString()}</small></div>
