@@ -7,7 +7,7 @@ type Stage = "home" | "lobby" | "table";
 type Street = "preflop" | "flop" | "turn" | "river" | "showdown";
 type Action = "fold" | "check" | "call" | "raise";
 type Card = { rank: number; label: string; suit: string; red: boolean };
-type Player = Bot & { human: boolean; folded: boolean; bet: number; lastAction: string; role: string };
+type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; lastAction: string; role: string };
 type Game = {
   hand: number; street: Street; players: Player[]; dealerId: string; pot: number;
   currentBet: number; pending: string[]; log: string[]; winner: string | null; busy: boolean;
@@ -80,7 +80,7 @@ function orderedAfter(players: Player[], id: string, includeId = false) {
   return result;
 }
 
-function newGame(source: Array<{ id: string; name: string; level: "简单" | "困难"; chips: number; human: boolean }>, hand: number, previousTimeBanks: Record<string, number> = {}): Game {
+function newGame(source: Array<{ id: string; name: string; level: "简单" | "困难"; chips: number; human: boolean; host: boolean }>, hand: number, previousTimeBanks: Record<string, number> = {}): Game {
   const dealerIndex = (hand - 1) % source.length;
   const sbIndex = source.length === 2 ? dealerIndex : (dealerIndex + 1) % source.length;
   const bbIndex = source.length === 2 ? (dealerIndex + 1) % source.length : (dealerIndex + 2) % source.length;
@@ -179,10 +179,11 @@ export default function Home() {
   const [stage, setStage] = useState<Stage>("home");
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [nickname, setNickname] = useState("玩家");
+  const [nickname, setNickname] = useState("");
   const [roomToken, setRoomToken] = useState("");
   const [onlineRoom, setOnlineRoom] = useState<OnlineRoom | null>(null);
   const [onlineError, setOnlineError] = useState("");
+  const [actionPending, setActionPending] = useState(false);
   const [bots, setBots] = useState<Bot[]>([]);
   const [botLevel, setBotLevel] = useState<"简单" | "困难">("简单");
   const [copied, setCopied] = useState(false);
@@ -190,8 +191,8 @@ export default function Home() {
   const [raiseAmount, setRaiseAmount] = useState(200);
   const [turnClock, setTurnClock] = useState({ key: "idle", seconds: 60 });
 
-  const seats = useMemo(() => onlineRoom ? onlineRoom.players.map((player) => ({ ...player, id: player.id === onlineRoom.viewerId ? "you" : player.id, name: player.id === onlineRoom.viewerId ? `${player.name} · 你` : player.name })) : [
-    { id: "you", name: "房主 · 你", chips: 10000, human: true, level: "困难" as const }, ...bots.map((bot) => ({ ...bot, human: false })),
+  const seats = useMemo(() => onlineRoom ? onlineRoom.players.map((player) => ({ ...player, id: player.id === onlineRoom.viewerId ? "you" : player.id })) : [
+    { id: "you", name: "玩家", chips: 10000, human: true, host: true, level: "困难" as const }, ...bots.map((bot) => ({ ...bot, human: false, host: false })),
   ], [bots, onlineRoom]);
 
   const actor = game?.players.find((player) => player.id === game.pending[0]);
@@ -242,7 +243,7 @@ export default function Home() {
   }, [secondsLeft, turnKey, onlineRoom]);
 
   useEffect(() => {
-    if (stage !== "lobby" || !roomCode || !roomToken) return;
+    if (!roomCode || !roomToken) return;
     const sync = async () => {
       try {
         const response = await fetch(`/api/rooms?code=${roomCode}&token=${encodeURIComponent(roomToken)}`, { cache: "no-store" });
@@ -250,7 +251,7 @@ export default function Home() {
       } catch { /* 下一次轮询自动重试 */ }
     };
     void sync();
-    const interval = window.setInterval(sync, 1000);
+    const interval = window.setInterval(sync, 500);
     return () => window.clearInterval(interval);
   }, [stage, roomCode, roomToken]);
 
@@ -293,6 +294,12 @@ export default function Home() {
     } catch (error) { setOnlineError(error instanceof Error ? error.message : "加入失败"); }
   }
 
+  async function updateNickname() {
+    if (!onlineRoom) return;
+    try { const result = await roomRequest({ action: "updateName", code: roomCode, token: roomToken, name: nickname }); setOnlineRoom(result.room); }
+    catch (error) { setOnlineError(error instanceof Error ? error.message : "修改失败"); }
+  }
+
   async function addBot() {
     if (onlineRoom) {
       try { const result = await roomRequest({ action: "addBot", code: roomCode, token: roomToken, level: botLevel }); setOnlineRoom(result.room); }
@@ -326,8 +333,11 @@ export default function Home() {
 
   async function heroAction(action: Action, target?: number) {
     if (onlineRoom) {
+      if (actionPending) return;
+      setActionPending(true);
       try { const result = await roomRequest({ action: "gameAction", code: roomCode, token: roomToken, gameAction: action, raiseTo: target }); setOnlineRoom(result.room); if (result.room.game) setGame(result.room.game); }
       catch (error) { setOnlineError(error instanceof Error ? error.message : "行动失败"); }
+      finally { setActionPending(false); }
       return;
     }
     setGame((current) => current ? applyAction(current, "you", action, target) : current);
@@ -340,7 +350,7 @@ export default function Home() {
       catch (error) { setOnlineError(error instanceof Error ? error.message : "下一手失败"); }
       return;
     }
-    const source = game.players.map(({ id, name, level, chips, human }) => ({ id, name, level, chips, human }));
+    const source = game.players.map(({ id, name, level, chips, human, host }) => ({ id, name, level, chips, human, host }));
     setGame(newGame(source, game.hand + 1, game.timeBankUsedAt));
   }
 
@@ -374,10 +384,12 @@ export default function Home() {
 
       {stage === "lobby" && <section className="lobby-wrap">
         <div className="section-head"><div><span className="eyebrow">WAITING ROOM</span><h1>等朋友上桌</h1></div><button className="invite" onClick={copyInvite}>{copied ? "已复制 ✓" : "复制邀请链接"}</button></div>
+        {onlineRoom && <div className="nickname-editor"><label>我的昵称</label><input value={nickname} maxLength={12} onChange={(event) => setNickname(event.target.value)} /><button onClick={updateNickname}>保存</button></div>}
+        {onlineError && <p className="online-error">{onlineError}</p>}
         <div className="lobby-grid">
           <div className="seats-card"><div className="card-title"><span>座位</span><small>{seats.length} / 6</small></div>
             {seats.map((seat, index) => <div className="player-row" key={seat.id}>
-              <div className={`avatar avatar-${index}`}>{seat.human ? "房" : "AI"}</div><div className="player-copy"><strong>{seat.name}</strong><small>{seat.human ? "已准备" : `${seat.level}人机`}</small></div>
+              <div className={`avatar avatar-${index}`}>{seat.human ? "人" : "AI"}</div><div className="player-copy"><strong>{seat.name}{seat.host && <i className="identity-tag host-tag">房主</i>}{seat.id === "you" && <i className="identity-tag self-tag">你</i>}</strong><small>{seat.human ? "已准备" : `${seat.level}人机`}</small></div>
               <span className="chips">{seat.chips.toLocaleString()}</span>{!seat.human && onlineRoom?.isHost && <button className="remove" onClick={() => removeSeat(seat.id)}>移除</button>}
             </div>)}
             {Array.from({ length: 6 - seats.length }).map((_, index) => <div className="empty-seat" key={index}><span>+</span>等待玩家加入</div>)}
@@ -401,7 +413,7 @@ export default function Home() {
         <div className="table-layout">
           <div className="poker-table">
             {game.players.filter((player) => player.id !== "you").map((player, index) => <div className={`table-player seat-${index + 1} ${actor?.id === player.id ? "acting" : ""} ${player.folded ? "folded" : ""}`} key={player.id}>
-              {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className="mini-avatar">{player.human ? "友" : "AI"}</div><strong>{player.name}</strong><small>{player.chips.toLocaleString()}</small>
+              {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className="mini-avatar">{player.human ? "友" : "AI"}</div><strong>{player.name}{player.host && <i className="identity-tag host-tag">房主</i>}</strong><small>{player.chips.toLocaleString()}</small>
               <span className="last-action">{player.lastAction}</span>{!player.folded && (game.street === "showdown"
                 ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red" : ""} key={cardIndex}>{card.label}{card.suit}</b>)}</div>
                 : <div className="card-backs"><i /><i /></div>)}
@@ -412,7 +424,7 @@ export default function Home() {
               : <em key={index} />)}</div>
             <div className={`hero-seat ${actor?.human ? "acting" : ""} ${hero?.folded ? "folded" : ""}`}>
               {hero?.role && <span className={`role role-${hero.role.includes("BB") ? "bb" : hero.role.includes("SB") ? "sb" : "d"}`}>{hero.role}</span>}
-              <div className="hero-info"><strong>房主 · 你</strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
+              <div className="hero-info"><strong>{hero?.name}{hero?.host && <i className="identity-tag host-tag">房主</i>}<i className="identity-tag self-tag">你</i></strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
               {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red" : ""}`} key={index}>{card.label}<span>{card.suit}</span></div>)}
             </div>
           </div>
@@ -420,7 +432,7 @@ export default function Home() {
         </div>
         <div className="action-panel">
           {game.winner ? <><p className="result-text">{game.winner}</p><button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
-          : actor?.human ? <><div className="turn-prompt"><p>轮到你 · 当前需跟注 {callAmount}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
+          : actor?.human ? <><div className="turn-prompt"><p>{actionPending ? "正在提交操作…" : `轮到你 · 当前需跟注 ${callAmount}`}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady || actionPending}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
             <div className="quick-bets">
               <button onClick={() => setRaiseAmount(halfPotRaise)}>半池 <strong>{halfPotRaise}</strong></button>
               <button onClick={() => setRaiseAmount(potRaise)}>满池 <strong>{potRaise}</strong></button>
@@ -428,11 +440,12 @@ export default function Home() {
             </div>
             <label className="raise-slider"><span>加注到</span><input aria-label="加注金额" type="range" min={Math.min(minimumRaise, maximumRaise)} max={maximumRaise} step={50} value={clampedRaise} onChange={(event) => setRaiseAmount(Number(event.target.value))} /><output>{clampedRaise.toLocaleString()}</output></label>
           </div><div className="actions">
-            <button className="fold" onClick={() => heroAction("fold")}>弃牌</button>
-            <button onClick={() => heroAction(callAmount ? "call" : "check")}>{callAmount ? "跟注" : "过牌"}<strong>{callAmount || "无需下注"}</strong></button>
-            <button className="raise" onClick={() => heroAction("raise", clampedRaise)} disabled={maximumRaise <= game.currentBet}>加注<strong>到 {clampedRaise.toLocaleString()}</strong></button>
+            <button className="fold" disabled={actionPending} onClick={() => heroAction("fold")}>弃牌</button>
+            <button disabled={actionPending} onClick={() => heroAction(callAmount ? "call" : "check")}>{callAmount ? "跟注" : "过牌"}<strong>{callAmount || "无需下注"}</strong></button>
+            <button className="raise" onClick={() => heroAction("raise", clampedRaise)} disabled={actionPending || maximumRaise <= game.currentBet}>加注<strong>到 {clampedRaise.toLocaleString()}</strong></button>
           </div></>
           : <p className="thinking">{actor?.name ?? "系统"} 正在思考，牌局会自动继续…</p>}
+          {onlineError && <p className="table-error">{onlineError}</p>}
         </div>
       </section>}
     </main>
