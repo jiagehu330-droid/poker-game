@@ -12,7 +12,7 @@ type Game = {
   hand: number; street: Street; players: Player[]; dealerId: string; pot: number;
   currentBet: number; pending: string[]; log: string[]; winner: string | null; busy: boolean;
   board: Card[]; holes: Record<string, [Card, Card]>;
-  turnSerial: number; timeBankUsedAt: Record<string, number>;
+  turnSerial: number; deadline?: number; timeBankUsedAt: Record<string, number>;
 };
 type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number };
 type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null };
@@ -199,6 +199,8 @@ export default function Home() {
   const actorId = actor?.id;
   const actorHuman = actor?.human ?? false;
   const actorLevel = actor?.level;
+  const isHeroTurn = actorId === "you";
+  const isOnline = !!onlineRoom;
   const turnKey = turnKeyFor(game);
   const secondsLeft = turnClock.key === turnKey ? turnClock.seconds : 60;
   const hero = game?.players.find((player) => player.id === "you");
@@ -228,11 +230,19 @@ export default function Home() {
 
   useEffect(() => {
     if (turnKey === "idle") return;
-    const interval = window.setInterval(() => {
+    const syncClock = () => {
+      if (isOnline && game?.deadline) {
+        setTurnClock({ key: turnKey, seconds: Math.max(0, Math.ceil((game.deadline - Date.now()) / 1000)) });
+        return;
+      }
       setTurnClock((current) => ({ key: turnKey, seconds: Math.max(0, (current.key === turnKey ? current.seconds : 60) - 1) }));
+    };
+    syncClock();
+    const interval = window.setInterval(() => {
+      syncClock();
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [turnKey]);
+  }, [turnKey, game?.deadline, isOnline]);
 
   useEffect(() => {
     if (onlineRoom || turnKey === "idle" || secondsLeft > 0) return;
@@ -377,7 +387,7 @@ export default function Home() {
   }
 
   async function addTime() {
-    if (!game || !actor?.human || !timeBankReady) return;
+    if (!game || !isHeroTurn || !timeBankReady) return;
     if (onlineRoom) {
       try { const result = await roomRequest({ action: "extendTime", code: roomCode, token: roomToken }); setOnlineRoom(result.room); if (result.room.game) setGame(result.room.game); }
       catch (error) { setOnlineError(error instanceof Error ? error.message : "加时失败"); }
@@ -444,7 +454,7 @@ export default function Home() {
             <div className="community">{game.board.map((card, index) => index < visibleCards
               ? <b key={index} className={card.red ? "red" : ""}>{card.label}<span>{card.suit}</span></b>
               : <em key={index} />)}</div>
-            <div className={`hero-seat ${actor?.human ? "acting" : ""} ${hero?.folded ? "folded" : ""}`}>
+            <div className={`hero-seat ${isHeroTurn ? "acting" : ""} ${hero?.folded ? "folded" : ""}`}>
               {hero?.role && <span className={`role role-${hero.role.includes("BB") ? "bb" : hero.role.includes("SB") ? "sb" : "d"}`}>{hero.role}</span>}
               <div className="hero-info"><strong>{hero?.name}{hero?.host && <i className="identity-tag host-tag">房主</i>}<i className="identity-tag self-tag">你</i></strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
               {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red" : ""}`} key={index}>{card.label}<span>{card.suit}</span></div>)}
@@ -454,7 +464,7 @@ export default function Home() {
         </div>
         <div className="action-panel">
           {game.winner ? <><p className="result-text">{game.winner}</p><button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
-          : actor?.human ? <><div className="turn-prompt"><p>{actionPending ? "正在提交操作…" : `轮到你 · 当前需跟注 ${callAmount}`}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady || actionPending}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
+          : isHeroTurn ? <><div className="turn-prompt"><p>{actionPending ? "正在提交操作…" : callAmount > 0 ? `轮到你 · 需跟注 ${callAmount}` : "轮到你 · 可以过牌"}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady || actionPending}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
             <div className="quick-bets">
               <button onClick={() => setRaiseAmount(halfPotRaise)}>半池 <strong>{halfPotRaise}</strong></button>
               <button onClick={() => setRaiseAmount(potRaise)}>满池 <strong>{potRaise}</strong></button>
