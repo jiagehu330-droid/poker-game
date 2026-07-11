@@ -481,7 +481,7 @@ export default function Home() {
           <aside className="hand-log"><h3>本手行动</h3>{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</aside>
         </div>
         <div className="action-panel">
-          {game.winner ? <><p className="result-text">{game.winner}</p>{isSpectator && <div className="chip-shop"><strong>筹码商店 <small>仅用于下一手</small></strong><div>{[5000, 10000, 20000].map((amount) => <button key={amount} className={onlineViewer?.queuedChips === amount ? "selected" : ""} onClick={() => buyChips(amount)} disabled={actionPending}>{amount.toLocaleString()} 筹码</button>)}</div><button className="enter-table" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请进场，等待房主" : "选择进场"}</button></div>}<button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
+          {game.winner ? <><p className="result-text">{game.winner}</p><button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
           : isHeroTurn ? <><div className="turn-prompt"><p>{actionPending ? "正在提交操作…" : callAmount > 0 ? `轮到你 · 需跟注 ${callAmount}` : "轮到你 · 可以过牌"}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady || actionPending}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
             <div className="quick-bets">
               <button onClick={() => setRaiseAmount(halfPotRaise)}>半池 <strong>{halfPotRaise}</strong></button>
@@ -495,6 +495,7 @@ export default function Home() {
             <button className="raise" onClick={() => heroAction("raise", clampedRaise)} disabled={actionPending || maximumRaise <= game.currentBet}>加注<strong>到 {clampedRaise.toLocaleString()}</strong></button>
           </div></>
           : <p className="thinking">{actor?.name ?? "系统"} 正在思考，牌局会自动继续…</p>}
+          {onlineRoom && <div className="chip-shop permanent-shop"><strong>筹码商店 <small>预购筹码仅在下一手生效</small></strong>{(onlineViewer?.queuedChips ?? 0) > 0 && <p>已预购：{onlineViewer?.queuedChips.toLocaleString()} 筹码</p>}<div>{[5000, 10000, 20000].map((amount) => <button key={amount} onClick={() => buyChips(amount)} disabled={actionPending}>＋{amount.toLocaleString()}</button>)}</div>{isSpectator && <button className="enter-table" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请入局，等待下一手" : "申请下一手入局"}</button>}</div>}
           {onlineError && <p className="table-error">{onlineError}</p>}
         </div>
       </section>}
