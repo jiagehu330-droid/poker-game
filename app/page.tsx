@@ -7,14 +7,14 @@ type Stage = "home" | "lobby" | "table";
 type Street = "preflop" | "flop" | "turn" | "river" | "showdown";
 type Action = "fold" | "check" | "call" | "raise";
 type Card = { rank: number; label: string; suit: string; red: boolean };
-type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; lastAction: string; role: string };
+type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; committed?: number; lastAction: string; role: string };
 type Game = {
   hand: number; street: Street; players: Player[]; dealerId: string; pot: number;
   currentBet: number; pending: string[]; log: string[]; winner: string | null; busy: boolean;
-  board: Card[]; holes: Record<string, [Card, Card]>;
+  board: Card[]; holes: Record<string, Card[]>;
   turnSerial: number; deadline?: number; turnSecondsLeft?: number; timeBankUsedAt: Record<string, number>;
 };
-type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number };
+type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean };
 type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null };
 
 const BOT_NAMES = ["阿策", "小满", "河牌侠", "老K", "桃子"];
@@ -204,6 +204,8 @@ export default function Home() {
   const turnKey = turnKeyFor(game);
   const secondsLeft = turnClock.key === turnKey ? turnClock.seconds : 60;
   const hero = game?.players.find((player) => player.id === "you");
+  const onlineViewer = onlineRoom?.players.find((player) => player.id === onlineRoom.viewerId);
+  const isSpectator = !!onlineRoom && onlineViewer?.seated === false;
   const callAmount = game && hero ? Math.max(0, game.currentBet - hero.bet) : 0;
   const minimumRaise = game ? Math.max(game.currentBet + 100, game.currentBet === 0 ? 100 : game.currentBet * 2) : 100;
   const maximumRaise = hero ? hero.bet + hero.chips : minimumRaise;
@@ -397,6 +399,22 @@ export default function Home() {
     setGame((current) => current ? { ...current, timeBankUsedAt: { ...current.timeBankUsedAt, you: currentRound }, log: [...current.log, "房主 · 你 使用时间卡 +20 秒"] } : current);
   }
 
+  async function buyChips(amount: number) {
+    if (!onlineRoom || actionPending) return;
+    setActionPending(true);
+    try { const result = await roomRequest({ action: "buyChips", code: roomCode, token: roomToken, buyIn: amount }); setOnlineRoom(result.room); }
+    catch (error) { setOnlineError(error instanceof Error ? error.message : "购买筹码失败"); }
+    finally { setActionPending(false); }
+  }
+
+  async function enterNextHand() {
+    if (!onlineRoom || actionPending) return;
+    setActionPending(true);
+    try { const result = await roomRequest({ action: "enterNextHand", code: roomCode, token: roomToken }); setOnlineRoom(result.room); }
+    catch (error) { setOnlineError(error instanceof Error ? error.message : "进场失败"); }
+    finally { setActionPending(false); }
+  }
+
   return (
     <main className={`app-shell stage-${stage}`}>
       <header className="topbar">
@@ -454,16 +472,16 @@ export default function Home() {
             <div className="community">{game.board.map((card, index) => index < visibleCards
               ? <b key={index} className={card.red ? "red" : ""}>{card.label}<span>{card.suit}</span></b>
               : <em key={index} />)}</div>
-            <div className={`hero-seat ${isHeroTurn ? "acting" : ""} ${hero?.folded ? "folded" : ""}`}>
+            {hero ? <div className={`hero-seat ${isHeroTurn ? "acting" : ""} ${hero.folded ? "folded" : ""}`}>
               {hero?.role && <span className={`role role-${hero.role.includes("BB") ? "bb" : hero.role.includes("SB") ? "sb" : "d"}`}>{hero.role}</span>}
               <div className="hero-info"><strong>{hero?.name}{hero?.host && <i className="identity-tag host-tag">房主</i>}<i className="identity-tag self-tag">你</i></strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
               {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red" : ""}`} key={index}>{card.label}<span>{card.suit}</span></div>)}
-            </div>
+            </div> : <div className="hero-seat spectator-seat"><div className="hero-info"><strong>观战席</strong><span>等待下一手进场</span></div></div>}
           </div>
           <aside className="hand-log"><h3>本手行动</h3>{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</aside>
         </div>
         <div className="action-panel">
-          {game.winner ? <><p className="result-text">{game.winner}</p><button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
+          {game.winner ? <><p className="result-text">{game.winner}</p>{isSpectator && <div className="chip-shop"><strong>筹码商店 <small>仅用于下一手</small></strong><div>{[5000, 10000, 20000].map((amount) => <button key={amount} className={onlineViewer?.queuedChips === amount ? "selected" : ""} onClick={() => buyChips(amount)} disabled={actionPending}>{amount.toLocaleString()} 筹码</button>)}</div><button className="enter-table" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请进场，等待房主" : "选择进场"}</button></div>}<button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
           : isHeroTurn ? <><div className="turn-prompt"><p>{actionPending ? "正在提交操作…" : callAmount > 0 ? `轮到你 · 需跟注 ${callAmount}` : "轮到你 · 可以过牌"}</p><button className="time-bank" onClick={addTime} disabled={!timeBankReady || actionPending}>{timeBankReady ? "+20秒" : "时间卡冷却中"}</button></div><div className="bet-controls">
             <div className="quick-bets">
               <button onClick={() => setRaiseAmount(halfPotRaise)}>半池 <strong>{halfPotRaise}</strong></button>
