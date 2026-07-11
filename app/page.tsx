@@ -12,7 +12,7 @@ type Game = {
   hand: number; street: Street; players: Player[]; dealerId: string; pot: number;
   currentBet: number; pending: string[]; log: string[]; winner: string | null; busy: boolean;
   board: Card[]; holes: Record<string, [Card, Card]>;
-  turnSerial: number; deadline?: number; timeBankUsedAt: Record<string, number>;
+  turnSerial: number; deadline?: number; turnSecondsLeft?: number; timeBankUsedAt: Record<string, number>;
 };
 type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number };
 type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null };
@@ -231,8 +231,8 @@ export default function Home() {
   useEffect(() => {
     if (turnKey === "idle") return;
     const syncClock = () => {
-      if (isOnline && game?.deadline) {
-        setTurnClock({ key: turnKey, seconds: Math.max(0, Math.ceil((game.deadline - Date.now()) / 1000)) });
+      if (isOnline && game?.turnSecondsLeft !== undefined) {
+        setTurnClock({ key: turnKey, seconds: game.turnSecondsLeft });
         return;
       }
       setTurnClock((current) => ({ key: turnKey, seconds: Math.max(0, (current.key === turnKey ? current.seconds : 60) - 1) }));
@@ -242,7 +242,7 @@ export default function Home() {
       syncClock();
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [turnKey, game?.deadline, isOnline]);
+  }, [turnKey, game?.turnSecondsLeft, isOnline]);
 
   useEffect(() => {
     if (onlineRoom || turnKey === "idle" || secondsLeft > 0) return;
