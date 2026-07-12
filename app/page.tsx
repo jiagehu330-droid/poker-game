@@ -15,7 +15,8 @@ type Game = {
   turnSerial: number; deadline?: number; turnSecondsLeft?: number; timeBankUsedAt: Record<string, number>;
 };
 type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; online: boolean };
-type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null };
+type Settlement = { createdAt: number; hands: number; players: Array<{ id: string; name: string; host: boolean; human: boolean; finalChips: number; purchasesCount: number; purchasedChips: number; netChips: number }> };
+type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null; settlement?: Settlement | null };
 
 const BOT_NAMES = ["阿策", "小满", "河牌侠", "老K", "桃子"];
 const STREET_NAME: Record<Street, string> = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", showdown: "摊牌" };
@@ -184,6 +185,7 @@ export default function Home() {
   const [onlineRoom, setOnlineRoom] = useState<OnlineRoom | null>(null);
   const [onlineError, setOnlineError] = useState("");
   const [actionPending, setActionPending] = useState(false);
+  const [dismissedSettlementAt, setDismissedSettlementAt] = useState<number | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
   const [botLevel, setBotLevel] = useState<"简单" | "困难">("简单");
   const [copied, setCopied] = useState(false);
@@ -461,6 +463,8 @@ export default function Home() {
         {onlineRoom && <p className="sync-note">座位与牌局均由服务端实时同步</p>}
       </section>}
 
+      {stage === "lobby" && onlineRoom?.settlement && dismissedSettlementAt !== onlineRoom.settlement.createdAt && <div className="settlement-backdrop"><section className="settlement-sheet"><div className="settlement-head"><div><span className="eyebrow">SESSION REPORT</span><h2>本场结算单</h2><p>共进行 {onlineRoom.settlement.hands} 手</p></div><button onClick={() => setDismissedSettlementAt(onlineRoom.settlement!.createdAt)}>关闭</button></div><div className="settlement-table"><div className="settlement-row heading"><span>玩家</span><span>最终筹码</span><span>补码</span><span>净输赢</span></div>{onlineRoom.settlement.players.map((player) => <div className="settlement-row" key={player.id}><strong>{player.name}{player.host ? " · 房主" : ""}{!player.human ? " · AI" : ""}</strong><span>{player.finalChips.toLocaleString()}</span><span>{player.purchasesCount} 次 / {player.purchasedChips.toLocaleString()}</span><b className={player.netChips >= 0 ? "profit" : "loss"}>{player.netChips >= 0 ? "+" : ""}{player.netChips.toLocaleString()}</b></div>)}</div><small>净输赢 = 最终筹码 − 初始 10,000 − 累计补码</small></section></div>}
+
       {stage === "table" && game && <section className="table-screen">
         <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><div className="table-meta-actions">{onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局并返回大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}</div></div>
         <div className="round-strip"><span className="live-dot" />{game.winner ? game.winner : actor ? `${actor.name} 正在行动` : "正在推进牌局"}
@@ -471,7 +475,7 @@ export default function Home() {
             {game.players.filter((player) => player.id !== "you").map((player, index) => <div className={`table-player seat-${index + 1} ${actor?.id === player.id ? "acting" : ""} ${player.folded ? "folded" : ""}`} key={player.id}>
               {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className={`mini-avatar ${player.online === false ? "offline" : ""}`}>{player.human ? "友" : "AI"}</div><strong>{player.name}{player.host && <i className="identity-tag host-tag">房主</i>}</strong><small>{player.online === false ? "离线" : player.chips.toLocaleString()}</small>
               <span className="last-action">{player.lastAction}</span>{!player.folded && (game.street === "showdown"
-                ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red" : ""} key={cardIndex}>{card.label}{card.suit}</b>)}</div>
+                ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red-card" : "black-card"} key={cardIndex}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></b>)}</div>
                 : <div className="card-backs"><i /><i /></div>)}
             </div>)}
             <div className="pot"><small>底池</small><strong>{game.pot.toLocaleString()}</strong></div>
@@ -481,7 +485,7 @@ export default function Home() {
             {hero ? <div className={`hero-seat ${isHeroTurn ? "acting" : ""} ${hero.folded ? "folded" : ""}`}>
               {hero?.role && <span className={`role role-${hero.role.includes("BB") ? "bb" : hero.role.includes("SB") ? "sb" : "d"}`}>{hero.role}</span>}
               <div className="hero-info"><strong>{hero?.name}{hero?.host && <i className="identity-tag host-tag">房主</i>}<i className="identity-tag self-tag">你</i></strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
-              {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red" : ""}`} key={index}>{card.label}<span>{card.suit}</span></div>)}
+              {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red-card" : "black-card"}`} key={index}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></div>)}
             </div> : <div className="hero-seat spectator-seat"><div className="hero-info"><strong>观战席</strong><span>等待下一手进场</span></div></div>}
           </div>
           <aside className="hand-log"><h3>本手行动</h3>{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</aside>
