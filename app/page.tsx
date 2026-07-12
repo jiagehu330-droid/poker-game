@@ -1,5 +1,7 @@
 "use client";
 
+// Deployment marker: settlement report and explicit suit colors.
+
 import { useEffect, useMemo, useState } from "react";
 
 type Bot = { id: string; name: string; level: "简单" | "困难"; chips: number };
