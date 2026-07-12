@@ -46,3 +46,11 @@
 .chip-shop button.selected { border-color: var(--gold); color: var(--gold); background: rgba(229,184,90,.12); }
 .chip-shop .enter-table { width: 100%; margin-top: 9px; border-color: rgba(117,220,160,.35); color: #8edcaf; }
 .chip-shop button:disabled { opacity: .45; }
+
+.avatar.offline,
+.mini-avatar.offline {
+  filter: grayscale(1);
+  background: #59615d;
+  color: #c5cbc7;
+  opacity: .58;
+}
