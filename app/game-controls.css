@@ -54,3 +54,56 @@
   color: #c5cbc7;
   opacity: .58;
 }
+
+.hole-card.red-card,
+.revealed-cards .red-card,
+.red-suit {
+  color: #c8243f !important;
+}
+
+.hole-card.black-card,
+.revealed-cards .black-card,
+.black-suit {
+  color: #17231e !important;
+}
+
+.settlement-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 12, 9, .82);
+  backdrop-filter: blur(8px);
+}
+
+.settlement-sheet {
+  width: min(760px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(229, 184, 90, .34);
+  border-radius: 18px;
+  background: #0b251d;
+  box-shadow: 0 28px 90px rgba(0,0,0,.48);
+}
+
+.settlement-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.settlement-head h2 { margin: 8px 0 4px; font: 500 34px Georgia, "Songti SC", serif; }
+.settlement-head p { margin: 0 0 18px; color: #8fa198; font-size: 12px; }
+.settlement-head button { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: transparent; color: #aebdb5; }
+.settlement-table { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.settlement-row { display: grid; grid-template-columns: 1.4fr 1fr 1.25fr .8fr; gap: 12px; align-items: center; padding: 13px 15px; border-top: 1px solid var(--line); font-size: 12px; }
+.settlement-row:first-child { border-top: 0; }
+.settlement-row.heading { color: #71867b; background: rgba(0,0,0,.16); font-size: 10px; }
+.settlement-row strong { color: #e9eee9; }
+.settlement-row .profit { color: #82dba7; }
+.settlement-row .loss { color: #ec8b91; }
+.settlement-sheet > small { display: block; margin-top: 11px; color: #70847a; }
+
+@media(max-width: 620px) {
+  .settlement-sheet { padding: 17px; }
+  .settlement-row { grid-template-columns: 1.3fr .9fr .8fr; }
+  .settlement-row > :nth-child(3) { display: none; }
+}
