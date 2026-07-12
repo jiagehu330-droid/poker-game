@@ -295,8 +295,14 @@ export default function Home() {
 
   async function roomRequest(payload: Record<string, unknown>) {
     setOnlineError("");
-    const response = await fetch("/api/rooms", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    const response = await fetch("/api/rooms", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...payload, requestId: crypto.randomUUID() }) });
     const result = await response.json();
+    if (!response.ok && result.room) {
+      const latest = result.room as OnlineRoom;
+      setOnlineRoom(latest);
+      if (latest.game) { setGame(latest.game); setStage("table"); }
+      else if (latest.phase === "lobby") { setGame(null); setStage("lobby"); }
+    }
     if (!response.ok) throw new Error(result.error ?? "房间操作失败");
     return result as { token?: string; room: OnlineRoom };
   }
