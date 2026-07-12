@@ -107,3 +107,67 @@
   .settlement-row { grid-template-columns: 1.3fr .9fr .8fr; }
   .settlement-row > :nth-child(3) { display: none; }
 }
+
+.table-meta .game-menu-button {
+  padding: 7px 11px;
+  border: 1px solid rgba(229,184,90,.3);
+  border-radius: 8px;
+  background: rgba(229,184,90,.07);
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.game-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2,12,9,.82);
+  backdrop-filter: blur(8px);
+}
+
+.game-menu {
+  width: min(720px,100%);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgba(229,184,90,.3);
+  border-radius: 18px;
+  background: #0b251d;
+  box-shadow: 0 28px 90px rgba(0,0,0,.48);
+}
+
+.game-menu-head { display:flex; align-items:center; justify-content:space-between; }
+.game-menu-head h2 { margin:0; font:500 30px Georgia,"Songti SC",serif; }
+.game-menu-head button { border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:transparent; color:#aebdb5; }
+.game-menu-tabs { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:18px 0; padding:4px; border-radius:10px; background:rgba(0,0,0,.18); }
+.game-menu-tabs button { border:0; border-radius:7px; padding:11px; background:transparent; color:#83958c; font-weight:800; }
+.game-menu-tabs button.active { background:#285544; color:white; }
+.menu-shop,.rules-content { padding:4px 2px; }
+.menu-shop h3,.rules-content h3 { margin:8px 0 10px; color:#eef3f0; }
+.menu-shop p,.rules-content p { color:#a8b7af; line-height:1.7; font-size:13px; }
+.menu-shop > strong { display:block; margin:12px 0; color:var(--gold); }
+.menu-shop > div { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.menu-shop button { padding:12px 8px; border:1px solid var(--line); border-radius:9px; background:rgba(255,255,255,.045); color:#e2e9e5; }
+.menu-shop .menu-enter { width:100%; margin-top:10px; border-color:rgba(117,220,160,.35); color:#8edcaf; }
+.menu-shop button:disabled { opacity:.4; }
+.rule-rounds { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:14px 0; }
+.rule-rounds span { padding:11px; border:1px solid var(--line); border-radius:9px; color:#91a49a; font-size:12px; }
+.rule-rounds b { display:block; margin-bottom:3px; color:var(--gold); }
+.hand-rankings { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+.hand-rankings > div { display:grid; grid-template-columns:25px 100px 1fr; gap:9px; align-items:center; padding:10px 12px; border-top:1px solid var(--line); }
+.hand-rankings > div:first-child { border-top:0; }
+.hand-rankings i { display:grid; place-items:center; width:21px; height:21px; border-radius:50%; background:rgba(229,184,90,.12); color:var(--gold); font:800 10px ui-monospace; font-style:normal; }
+.hand-rankings strong { color:#e7ece9; font-size:12px; }
+.hand-rankings span { color:#82948b; font-size:11px; }
+.rules-content > small { display:block; margin-top:11px; color:#71857b; line-height:1.5; }
+
+@media(max-width:620px) {
+  .game-menu { padding:16px; }
+  .rule-rounds { grid-template-columns:1fr; }
+  .hand-rankings > div { grid-template-columns:24px 82px 1fr; padding:9px 8px; }
+  .table-meta-actions { gap:5px; }
+  .table-meta .game-menu-button,.table-meta .end-game { padding:6px 8px; font-size:10px; }
+}
