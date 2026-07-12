@@ -9,3 +9,8 @@ export function shortenedOfflineDeadline(deadline: number, human: boolean, lastS
   if (isPresenceOnline(human, lastSeen, now)) return deadline;
   return Math.min(deadline, now + OFFLINE_TURN_MS);
 }
+
+export function applyPresenceTimestamps<T extends { id: string; human: boolean; lastSeen: number }>(players: T[], timestamps: Map<string, number>, now = Date.now()) {
+  for (const player of players) player.lastSeen = !player.human ? now : timestamps.get(player.id) ?? player.lastSeen ?? 0;
+  return players;
+}
