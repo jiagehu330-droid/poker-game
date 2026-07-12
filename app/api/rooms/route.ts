@@ -4,8 +4,9 @@ import { getDb } from "../../../db";
 import { pokerRooms } from "../../../db/schema";
 import { extendServerTime, publicServerGame, runServerAutomation, serverAction, startServerGame, type GameAction, type ServerGame } from "../../../lib/poker-server";
 import { hasProcessedRequest, makeRequestKey, rememberRequest } from "../../../lib/request-ledger";
+import { isPresenceOnline, shortenedOfflineDeadline } from "../../../lib/presence";
 
-type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean };
+type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; lastSeen: number };
 type RoomState = { code: string; phase: "lobby" | "playing"; players: RoomPlayer[]; updatedAt: number; game?: ServerGame; recentRequestIds?: string[] };
 
 async function ensureRoomsTable() {
@@ -16,17 +17,40 @@ async function ensureRoomsTable() {
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS poker_presence (
+    room_code TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    last_seen INTEGER NOT NULL,
+    PRIMARY KEY (room_code, player_id)
+  )`).run();
+}
+
+async function heartbeat(roomCode: string, playerId: string) {
+  await env.DB.prepare("INSERT INTO poker_presence (room_code, player_id, last_seen) VALUES (?, ?, ?) ON CONFLICT(room_code, player_id) DO UPDATE SET last_seen = excluded.last_seen").bind(roomCode, playerId, Date.now()).run();
+}
+
+async function loadPresence(room: RoomState) {
+  const result = await env.DB.prepare("SELECT player_id, last_seen FROM poker_presence WHERE room_code = ?").bind(room.code).all<{ player_id: string; last_seen: number }>();
+  const seen = new Map(result.results.map((item) => [item.player_id, Number(item.last_seen)]));
+  room.players = room.players.map((player) => ({ ...player, lastSeen: !player.human ? Date.now() : seen.get(player.id) ?? player.lastSeen ?? 0 }));
 }
 
 function publicRoom(room: RoomState, token: string) {
   const viewer = room.players.find((player) => player.token === token);
+  const now = Date.now();
+  const online = (player: RoomPlayer) => isPresenceOnline(player.human, player.lastSeen, now);
+  const game = room.game && viewer ? publicServerGame(room.game, viewer.id) : null;
+  if (game) game.players = game.players.map((player) => {
+    const roomPlayer = room.players.find((item) => item.id === (player.id === "you" ? viewer!.id : player.id));
+    return { ...player, online: roomPlayer ? online(roomPlayer) : false };
+  });
   return {
     code: room.code,
     phase: room.phase,
     viewerId: viewer?.id ?? null,
     isHost: viewer?.host ?? false,
-    players: room.players.map((player) => ({ id: player.id, name: player.name, human: player.human, host: player.host, level: player.level, chips: player.chips, seated: player.seated, queuedChips: player.queuedChips, readyNextHand: player.readyNextHand })),
-    game: room.game && viewer ? publicServerGame(room.game, viewer.id) : null,
+    players: room.players.map((player) => ({ id: player.id, name: player.name, human: player.human, host: player.host, level: player.level, chips: player.chips, seated: player.seated, queuedChips: player.queuedChips, readyNextHand: player.readyNextHand, online: online(player) })),
+    game,
     updatedAt: room.updatedAt,
   };
 }
@@ -35,7 +59,7 @@ async function findRoom(code: string) {
   const [row] = await getDb().select().from(pokerRooms).where(eq(pokerRooms.code, code)).limit(1);
   if (!row) return null;
   const state = JSON.parse(row.stateJson) as RoomState;
-  state.players = state.players.map((player) => ({ ...player, seated: player.seated ?? player.chips > 0, queuedChips: player.queuedChips ?? 0, readyNextHand: player.readyNextHand ?? false }));
+  state.players = state.players.map((player) => ({ ...player, seated: player.seated ?? player.chips > 0, queuedChips: player.queuedChips ?? 0, readyNextHand: player.readyNextHand ?? false, lastSeen: player.lastSeen ?? 0 }));
   if (state.game) state.game.players = state.game.players.map((player) => ({ ...player, committed: player.committed ?? player.bet ?? 0 }));
   return { row, state };
 }
@@ -70,9 +94,16 @@ export async function GET(request: Request) {
   const token = url.searchParams.get("token") ?? "";
   const found = await findRoom(code);
   if (!found || !found.state.players.some((player) => player.token === token)) return Response.json({ error: "房间不存在或身份已失效" }, { status: 404 });
+  const now = Date.now(), viewer = found.state.players.find((player) => player.token === token)!;
+  await heartbeat(code, viewer.id); await loadPresence(found.state);
   const before = found.state.game?.turnSerial;
+  let presenceChanged = false;
+  if (found.state.game && !found.state.game.winner) {
+    const actor = found.state.players.find((player) => player.id === found.state.game!.pending[0]);
+    if (actor) { const deadline = shortenedOfflineDeadline(found.state.game.deadline, actor.human, actor.lastSeen, now); if (deadline !== found.state.game.deadline) { found.state.game.deadline = deadline; presenceChanged = true; } }
+  }
   if (found.state.game) { found.state.game = runServerAutomation(found.state.game); syncSettledPlayers(found.state); }
-  if (found.state.game?.turnSerial !== before) {
+  if (found.state.game?.turnSerial !== before || presenceChanged) {
     const saved = await saveRoom(found.state, found.row.revision);
     if (!saved) { const latest = await findRoom(code); if (latest) return Response.json({ room: publicRoom(latest.state, token) }, { headers: { "cache-control": "no-store" } }); }
   }
@@ -89,8 +120,9 @@ export async function POST(request: Request) {
     let code = roomCode();
     while (await findRoom(code)) code = roomCode();
     const token = crypto.randomUUID();
-    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name, human: true, host: true, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false }] };
+    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name, human: true, host: true, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now() }] };
     await getDb().insert(pokerRooms).values({ code, stateJson: JSON.stringify(room) });
+    await heartbeat(code, room.players[0].id);
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
   }
 
@@ -105,14 +137,16 @@ export async function POST(request: Request) {
     if (room.phase !== "lobby") return Response.json({ error: "牌局已经开始" }, { status: 409 });
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const token = crypto.randomUUID();
-    room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false });
+    room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now() });
     const saved = await saveRoom(room, found.row.revision);
     if (!saved) return Response.json({ error: "房间刚刚发生变化，请重新加入" }, { status: 409 });
+    await heartbeat(code, room.players.at(-1)!.id);
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
   }
 
   const viewer = room.players.find((player) => player.token === payload.token);
   if (!viewer) return Response.json({ error: "身份已失效" }, { status: 403 });
+  await heartbeat(code, viewer.id); await loadPresence(room); viewer.lastSeen = Date.now();
   const requestKey = makeRequestKey(viewer.id, payload.requestId);
   if (hasProcessedRequest(room.recentRequestIds, requestKey)) return Response.json({ room: publicRoom(room, payload.token ?? ""), duplicate: true });
   const commit = async () => {
@@ -175,7 +209,7 @@ export async function POST(request: Request) {
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const botCount = room.players.filter((player) => !player.human).length;
     const names = ["阿策", "小满", "河牌侠", "老K", "桃子"];
-    room.players.push({ id: crypto.randomUUID(), token: "", name: names[botCount] ?? `人机${botCount + 1}`, human: false, host: false, level: payload.level ?? "简单", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false });
+    room.players.push({ id: crypto.randomUUID(), token: "", name: names[botCount] ?? `人机${botCount + 1}`, human: false, host: false, level: payload.level ?? "简单", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: 0 });
   } else if (action === "removePlayer") {
     if (room.phase !== "lobby") return Response.json({ error: "牌局中不能调整座位" }, { status: 409 });
     room.players = room.players.filter((player) => player.id !== payload.playerId || player.host);
