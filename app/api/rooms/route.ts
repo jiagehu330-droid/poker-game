@@ -1,11 +1,12 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { pokerRooms } from "../../../db/schema";
 import { extendServerTime, publicServerGame, runServerAutomation, serverAction, startServerGame, type GameAction, type ServerGame } from "../../../lib/poker-server";
+import { hasProcessedRequest, makeRequestKey, rememberRequest } from "../../../lib/request-ledger";
 
 type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean };
-type RoomState = { code: string; phase: "lobby" | "playing"; players: RoomPlayer[]; updatedAt: number; game?: ServerGame };
+type RoomState = { code: string; phase: "lobby" | "playing"; players: RoomPlayer[]; updatedAt: number; game?: ServerGame; recentRequestIds?: string[] };
 
 async function ensureRoomsTable() {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS poker_rooms (
@@ -50,9 +51,10 @@ function syncSettledPlayers(room: RoomState) {
   });
 }
 
-async function saveRoom(room: RoomState) {
+async function saveRoom(room: RoomState, expectedRevision: number) {
   room.updatedAt = Date.now();
-  await getDb().update(pokerRooms).set({ stateJson: JSON.stringify(room), revision: sql`${pokerRooms.revision} + 1`, updatedAt: new Date().toISOString() }).where(eq(pokerRooms.code, room.code));
+  const updated = await getDb().update(pokerRooms).set({ stateJson: JSON.stringify(room), revision: sql`${pokerRooms.revision} + 1`, updatedAt: new Date().toISOString() }).where(and(eq(pokerRooms.code, room.code), eq(pokerRooms.revision, expectedRevision))).returning({ revision: pokerRooms.revision });
+  return updated.length === 1;
 }
 
 function roomCode() {
@@ -70,13 +72,16 @@ export async function GET(request: Request) {
   if (!found || !found.state.players.some((player) => player.token === token)) return Response.json({ error: "房间不存在或身份已失效" }, { status: 404 });
   const before = found.state.game?.turnSerial;
   if (found.state.game) { found.state.game = runServerAutomation(found.state.game); syncSettledPlayers(found.state); }
-  if (found.state.game?.turnSerial !== before) await saveRoom(found.state);
+  if (found.state.game?.turnSerial !== before) {
+    const saved = await saveRoom(found.state, found.row.revision);
+    if (!saved) { const latest = await findRoom(code); if (latest) return Response.json({ room: publicRoom(latest.state, token) }, { headers: { "cache-control": "no-store" } }); }
+  }
   return Response.json({ room: publicRoom(found.state, token) }, { headers: { "cache-control": "no-store, no-cache, must-revalidate" } });
 }
 
 export async function POST(request: Request) {
   await ensureRoomsTable();
-  const payload = await request.json() as { action?: string; code?: string; token?: string; name?: string; level?: "简单" | "困难"; playerId?: string; gameAction?: GameAction; raiseTo?: number; buyIn?: number };
+  const payload = await request.json() as { action?: string; code?: string; token?: string; name?: string; level?: "简单" | "困难"; playerId?: string; gameAction?: GameAction; raiseTo?: number; buyIn?: number; requestId?: string };
   const action = payload.action ?? "";
   if (action === "create") {
     const name = payload.name?.trim().slice(0, 12) ?? "";
@@ -101,38 +106,45 @@ export async function POST(request: Request) {
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const token = crypto.randomUUID();
     room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false });
-    await saveRoom(room);
+    const saved = await saveRoom(room, found.row.revision);
+    if (!saved) return Response.json({ error: "房间刚刚发生变化，请重新加入" }, { status: 409 });
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
   }
 
   const viewer = room.players.find((player) => player.token === payload.token);
   if (!viewer) return Response.json({ error: "身份已失效" }, { status: 403 });
+  const requestKey = makeRequestKey(viewer.id, payload.requestId);
+  if (hasProcessedRequest(room.recentRequestIds, requestKey)) return Response.json({ room: publicRoom(room, payload.token ?? ""), duplicate: true });
+  const commit = async () => {
+    room.recentRequestIds = rememberRequest(room.recentRequestIds, requestKey);
+    if (await saveRoom(room, found.row.revision)) return Response.json({ room: publicRoom(room, payload.token ?? "") });
+    const latest = await findRoom(code);
+    console.warn(JSON.stringify({ event: "room_revision_conflict", code, action, requestId: payload.requestId, expectedRevision: found.row.revision }));
+    return Response.json({ error: "牌局状态刚刚更新，已为你同步最新状态，请重试", room: latest ? publicRoom(latest.state, payload.token ?? "") : null }, { status: 409 });
+  };
   if (action === "updateName") {
     const name = payload.name?.trim().slice(0, 12) ?? "";
     if (!name) return Response.json({ error: "昵称不能为空" }, { status: 400 });
     if (room.phase !== "lobby") return Response.json({ error: "开局后不能修改昵称" }, { status: 409 });
-    viewer.name = name; await saveRoom(room);
-    return Response.json({ room: publicRoom(room, payload.token ?? "") });
+    viewer.name = name; return commit();
   }
   if (action === "gameAction" || action === "extendTime") {
     if (!room.game) return Response.json({ error: "牌局尚未开始" }, { status: 409 });
     try { room.game = action === "extendTime" ? extendServerTime(room.game, viewer.id) : serverAction(room.game, viewer.id, payload.gameAction!, payload.raiseTo); room.game = runServerAutomation(room.game); syncSettledPlayers(room); }
-    catch (error) { return Response.json({ error: error instanceof Error ? error.message : "操作无效" }, { status: 409 }); }
-    await saveRoom(room); return Response.json({ room: publicRoom(room, payload.token ?? "") });
+    catch (error) { console.warn(JSON.stringify({ event: "game_action_rejected", code, playerId: viewer.id, action: payload.gameAction, reason: error instanceof Error ? error.message : "操作无效" })); return Response.json({ error: error instanceof Error ? error.message : "操作无效" }, { status: 409 }); }
+    return commit();
   }
   if (action === "buyChips") {
     const amount = Number(payload.buyIn);
     if (![5000, 10000, 20000].includes(amount)) return Response.json({ error: "无效筹码包" }, { status: 400 });
     viewer.queuedChips += amount;
     if (!viewer.seated || viewer.chips === 0) viewer.readyNextHand = false;
-    await saveRoom(room);
-    return Response.json({ room: publicRoom(room, payload.token ?? "") });
+    return commit();
   }
   if (action === "enterNextHand") {
     if (viewer.seated || viewer.chips > 0) return Response.json({ error: "你已经在牌桌中" }, { status: 409 });
     if (!viewer.queuedChips) return Response.json({ error: "请先在商店选择筹码包" }, { status: 409 });
-    viewer.readyNextHand = true; await saveRoom(room);
-    return Response.json({ room: publicRoom(room, payload.token ?? "") });
+    viewer.readyNextHand = true; return commit();
   }
   if (!viewer.host) return Response.json({ error: "只有房主可以操作" }, { status: 403 });
 
@@ -169,6 +181,5 @@ export async function POST(request: Request) {
     room.players = room.players.filter((player) => player.id !== payload.playerId || player.host);
   } else return Response.json({ error: "未知操作" }, { status: 400 });
 
-  await saveRoom(room);
-  return Response.json({ room: publicRoom(room, payload.token ?? "") });
+  return commit();
 }
