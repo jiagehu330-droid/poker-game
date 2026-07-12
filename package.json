@@ -10,8 +10,8 @@
     "build": "vinext build && node scripts/prepare-deploy.mjs",
     "deploy": "wrangler deploy --config dist/server/wrangler.json",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/poker-rules.test.mjs",
-    "test:poker": "node --test tests/poker-rules.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/poker-rules.test.mjs tests/request-ledger.test.mjs",
+    "test:poker": "node --test tests/poker-rules.test.mjs tests/request-ledger.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
