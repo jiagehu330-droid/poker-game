@@ -5,9 +5,10 @@ import { pokerRooms } from "../../../db/schema";
 import { extendServerTime, publicServerGame, runServerAutomation, serverAction, startServerGame, type GameAction, type ServerGame } from "../../../lib/poker-server";
 import { hasProcessedRequest, makeRequestKey, rememberRequest } from "../../../lib/request-ledger";
 import { isPresenceOnline, shortenedOfflineDeadline } from "../../../lib/presence";
+import { createSessionSettlement, type Settlement } from "../../../lib/settlement";
 
-type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; lastSeen: number };
-type RoomState = { code: string; phase: "lobby" | "playing"; players: RoomPlayer[]; updatedAt: number; game?: ServerGame; recentRequestIds?: string[] };
+type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; lastSeen: number; purchasesCount: number; purchasedChips: number };
+type RoomState = { code: string; phase: "lobby" | "playing"; players: RoomPlayer[]; updatedAt: number; game?: ServerGame; recentRequestIds?: string[]; settlement?: Settlement };
 
 async function ensureRoomsTable() {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS poker_rooms (
@@ -51,6 +52,7 @@ function publicRoom(room: RoomState, token: string) {
     isHost: viewer?.host ?? false,
     players: room.players.map((player) => ({ id: player.id, name: player.name, human: player.human, host: player.host, level: player.level, chips: player.chips, seated: player.seated, queuedChips: player.queuedChips, readyNextHand: player.readyNextHand, online: online(player) })),
     game,
+    settlement: room.settlement ?? null,
     updatedAt: room.updatedAt,
   };
 }
@@ -59,7 +61,7 @@ async function findRoom(code: string) {
   const [row] = await getDb().select().from(pokerRooms).where(eq(pokerRooms.code, code)).limit(1);
   if (!row) return null;
   const state = JSON.parse(row.stateJson) as RoomState;
-  state.players = state.players.map((player) => ({ ...player, seated: player.seated ?? player.chips > 0, queuedChips: player.queuedChips ?? 0, readyNextHand: player.readyNextHand ?? false, lastSeen: player.lastSeen ?? 0 }));
+  state.players = state.players.map((player) => ({ ...player, seated: player.seated ?? player.chips > 0, queuedChips: player.queuedChips ?? 0, readyNextHand: player.readyNextHand ?? false, lastSeen: player.lastSeen ?? 0, purchasesCount: player.purchasesCount ?? 0, purchasedChips: player.purchasedChips ?? 0 }));
   if (state.game) state.game.players = state.game.players.map((player) => ({ ...player, committed: player.committed ?? player.bet ?? 0 }));
   return { row, state };
 }
@@ -70,7 +72,7 @@ function syncSettledPlayers(room: RoomState) {
   room.players = room.players.map((player) => {
     if (!chips.has(player.id)) return player;
     const nextChips = chips.get(player.id)!;
-    if (!player.human && nextChips === 0) return { ...player, chips: 0, seated: false, queuedChips: 10000, readyNextHand: true };
+    if (!player.human && nextChips === 0 && player.queuedChips === 0) return { ...player, chips: 0, seated: false, queuedChips: 10000, readyNextHand: true, purchasesCount: player.purchasesCount + 1, purchasedChips: player.purchasedChips + 10000 };
     return { ...player, chips: nextChips, seated: nextChips > 0 };
   });
 }
@@ -120,7 +122,7 @@ export async function POST(request: Request) {
     let code = roomCode();
     while (await findRoom(code)) code = roomCode();
     const token = crypto.randomUUID();
-    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name, human: true, host: true, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now() }] };
+    const room: RoomState = { code, phase: "lobby", updatedAt: Date.now(), players: [{ id: crypto.randomUUID(), token, name, human: true, host: true, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now(), purchasesCount: 0, purchasedChips: 0 }] };
     await getDb().insert(pokerRooms).values({ code, stateJson: JSON.stringify(room) });
     await heartbeat(code, room.players[0].id);
     return Response.json({ token, room: publicRoom(room, token) }, { status: 201 });
@@ -137,7 +139,7 @@ export async function POST(request: Request) {
     if (room.phase !== "lobby") return Response.json({ error: "牌局已经开始" }, { status: 409 });
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const token = crypto.randomUUID();
-    room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now() });
+    room.players.push({ id: crypto.randomUUID(), token, name, human: true, host: false, level: "困难", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: Date.now(), purchasesCount: 0, purchasedChips: 0 });
     const saved = await saveRoom(room, found.row.revision);
     if (!saved) return Response.json({ error: "房间刚刚发生变化，请重新加入" }, { status: 409 });
     await heartbeat(code, room.players.at(-1)!.id);
@@ -172,6 +174,8 @@ export async function POST(request: Request) {
     const amount = Number(payload.buyIn);
     if (![5000, 10000, 20000].includes(amount)) return Response.json({ error: "无效筹码包" }, { status: 400 });
     viewer.queuedChips += amount;
+    viewer.purchasesCount += 1;
+    viewer.purchasedChips += amount;
     if (!viewer.seated || viewer.chips === 0) viewer.readyNextHand = false;
     return commit();
   }
@@ -186,13 +190,14 @@ export async function POST(request: Request) {
     if (room.phase !== "lobby") return Response.json({ error: "牌局已经开始" }, { status: 409 });
     const seated = room.players.filter((player) => player.seated && player.chips > 0);
     if (seated.length < 2) return Response.json({ error: "至少需要两位有筹码的玩家" }, { status: 409 });
-    room.phase = "playing"; room.game = startServerGame(seated);
+    room.phase = "playing"; room.settlement = undefined; room.game = startServerGame(seated);
     room.game = runServerAutomation(room.game);
   } else if (action === "endGame") {
     if (room.phase !== "playing") return Response.json({ error: "当前没有进行中的牌局" }, { status: 409 });
+    room.settlement = createSessionSettlement(room.players, room.game);
     room.phase = "lobby";
     room.game = undefined;
-    room.players = room.players.map((player) => ({ ...player, chips: 10000, seated: true, queuedChips: 0, readyNextHand: false }));
+    room.players = room.players.map((player) => ({ ...player, chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, purchasesCount: 0, purchasedChips: 0 }));
   } else if (action === "nextHand") {
     if (!room.game?.winner) return Response.json({ error: "本手尚未结束" }, { status: 409 });
     syncSettledPlayers(room);
@@ -209,7 +214,7 @@ export async function POST(request: Request) {
     if (room.players.length >= 6) return Response.json({ error: "房间已满" }, { status: 409 });
     const botCount = room.players.filter((player) => !player.human).length;
     const names = ["阿策", "小满", "河牌侠", "老K", "桃子"];
-    room.players.push({ id: crypto.randomUUID(), token: "", name: names[botCount] ?? `人机${botCount + 1}`, human: false, host: false, level: payload.level ?? "简单", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: 0 });
+    room.players.push({ id: crypto.randomUUID(), token: "", name: names[botCount] ?? `人机${botCount + 1}`, human: false, host: false, level: payload.level ?? "简单", chips: 10000, seated: true, queuedChips: 0, readyNextHand: false, lastSeen: 0, purchasesCount: 0, purchasedChips: 0 });
   } else if (action === "removePlayer") {
     if (room.phase !== "lobby") return Response.json({ error: "牌局中不能调整座位" }, { status: 409 });
     room.players = room.players.filter((player) => player.id !== payload.playerId || player.host);
