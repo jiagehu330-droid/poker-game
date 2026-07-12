@@ -4,7 +4,7 @@ import { getDb } from "../../../db";
 import { pokerRooms } from "../../../db/schema";
 import { extendServerTime, publicServerGame, runServerAutomation, serverAction, startServerGame, type GameAction, type ServerGame } from "../../../lib/poker-server";
 import { hasProcessedRequest, makeRequestKey, rememberRequest } from "../../../lib/request-ledger";
-import { isPresenceOnline, shortenedOfflineDeadline } from "../../../lib/presence";
+import { applyPresenceTimestamps, isPresenceOnline, shortenedOfflineDeadline } from "../../../lib/presence";
 import { createSessionSettlement, type Settlement } from "../../../lib/settlement";
 
 type RoomPlayer = { id: string; token: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; lastSeen: number; purchasesCount: number; purchasedChips: number };
@@ -33,7 +33,7 @@ async function heartbeat(roomCode: string, playerId: string) {
 async function loadPresence(room: RoomState) {
   const result = await env.DB.prepare("SELECT player_id, last_seen FROM poker_presence WHERE room_code = ?").bind(room.code).all<{ player_id: string; last_seen: number }>();
   const seen = new Map(result.results.map((item) => [item.player_id, Number(item.last_seen)]));
-  room.players = room.players.map((player) => ({ ...player, lastSeen: !player.human ? Date.now() : seen.get(player.id) ?? player.lastSeen ?? 0 }));
+  applyPresenceTimestamps(room.players, seen);
 }
 
 function publicRoom(room: RoomState, token: string) {
