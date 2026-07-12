@@ -7,14 +7,14 @@ type Stage = "home" | "lobby" | "table";
 type Street = "preflop" | "flop" | "turn" | "river" | "showdown";
 type Action = "fold" | "check" | "call" | "raise";
 type Card = { rank: number; label: string; suit: string; red: boolean };
-type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; committed?: number; lastAction: string; role: string };
+type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; committed?: number; lastAction: string; role: string; online?: boolean };
 type Game = {
   hand: number; street: Street; players: Player[]; dealerId: string; pot: number;
   currentBet: number; pending: string[]; log: string[]; winner: string | null; busy: boolean;
   board: Card[]; holes: Record<string, Card[]>;
   turnSerial: number; deadline?: number; turnSecondsLeft?: number; timeBankUsedAt: Record<string, number>;
 };
-type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean };
+type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; level: "简单" | "困难"; chips: number; seated: boolean; queuedChips: number; readyNextHand: boolean; online: boolean };
 type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null };
 
 const BOT_NAMES = ["阿策", "小满", "河牌侠", "老K", "桃子"];
@@ -445,7 +445,7 @@ export default function Home() {
         <div className="lobby-grid">
           <div className="seats-card"><div className="card-title"><span>座位</span><small>{seats.length} / 6</small></div>
             {seats.map((seat, index) => <div className="player-row" key={seat.id}>
-              <div className={`avatar avatar-${index}`}>{seat.human ? "人" : "AI"}</div><div className="player-copy"><strong>{seat.name}{seat.host && <i className="identity-tag host-tag">房主</i>}{seat.id === "you" && <i className="identity-tag self-tag">你</i>}</strong><small>{seat.human ? "已准备" : `${seat.level}人机`}</small></div>
+              <div className={`avatar avatar-${index} ${seat.online === false ? "offline" : ""}`}>{seat.human ? "人" : "AI"}</div><div className="player-copy"><strong>{seat.name}{seat.host && <i className="identity-tag host-tag">房主</i>}{seat.id === "you" && <i className="identity-tag self-tag">你</i>}</strong><small>{seat.human ? seat.online === false ? "离线" : "在线" : `${seat.level}人机`}</small></div>
               <span className="chips">{seat.chips.toLocaleString()}</span>{((onlineRoom?.isHost && seat.id !== "you") || (!onlineRoom && !seat.human)) && <button className="remove" onClick={() => removeSeat(seat.id)}>{seat.human ? "移出" : "移除"}</button>}
             </div>)}
             {Array.from({ length: 6 - seats.length }).map((_, index) => <div className="empty-seat" key={index}><span>+</span>等待玩家加入</div>)}
@@ -469,7 +469,7 @@ export default function Home() {
         <div className="table-layout">
           <div className="poker-table">
             {game.players.filter((player) => player.id !== "you").map((player, index) => <div className={`table-player seat-${index + 1} ${actor?.id === player.id ? "acting" : ""} ${player.folded ? "folded" : ""}`} key={player.id}>
-              {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className="mini-avatar">{player.human ? "友" : "AI"}</div><strong>{player.name}{player.host && <i className="identity-tag host-tag">房主</i>}</strong><small>{player.chips.toLocaleString()}</small>
+              {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className={`mini-avatar ${player.online === false ? "offline" : ""}`}>{player.human ? "友" : "AI"}</div><strong>{player.name}{player.host && <i className="identity-tag host-tag">房主</i>}</strong><small>{player.online === false ? "离线" : player.chips.toLocaleString()}</small>
               <span className="last-action">{player.lastAction}</span>{!player.folded && (game.street === "showdown"
                 ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red" : ""} key={cardIndex}>{card.label}{card.suit}</b>)}</div>
                 : <div className="card-backs"><i /><i /></div>)}
