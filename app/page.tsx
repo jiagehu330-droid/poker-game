@@ -20,6 +20,14 @@ type OnlinePlayer = { id: string; name: string; human: boolean; host: boolean; l
 type Settlement = { createdAt: number; hands: number; players: Array<{ id: string; name: string; host: boolean; human: boolean; finalChips: number; purchasesCount: number; purchasedChips: number; netChips: number }> };
 type OnlineRoom = { code: string; phase: "lobby" | "playing"; viewerId: string; isHost: boolean; players: OnlinePlayer[]; updatedAt: number; game?: Game | null; settlement?: Settlement | null };
 
+const HAND_RANKINGS = [
+  ["皇家同花顺", "同一花色的 A、K、Q、J、10"], ["同花顺", "同一花色的五张连续牌"],
+  ["四条", "四张点数相同的牌"], ["葫芦", "三张相同点数，加一对"],
+  ["同花", "五张花色相同，但点数不连续"], ["顺子", "五张点数连续，花色可以不同"],
+  ["三条", "三张点数相同的牌"], ["两对", "两组不同点数的对子"],
+  ["一对", "两张点数相同的牌"], ["高牌", "无法组成其他牌型时，比较最大单牌"],
+] as const;
+
 const BOT_NAMES = ["阿策", "小满", "河牌侠", "老K", "桃子"];
 const STREET_NAME: Record<Street, string> = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", showdown: "摊牌" };
 const HAND_NAMES = ["高牌", "一对", "两对", "三条", "顺子", "同花", "葫芦", "四条", "同花顺"];
@@ -188,6 +196,8 @@ export default function Home() {
   const [onlineError, setOnlineError] = useState("");
   const [actionPending, setActionPending] = useState(false);
   const [dismissedSettlementAt, setDismissedSettlementAt] = useState<number | null>(null);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const [gameMenuTab, setGameMenuTab] = useState<"shop" | "rules">("shop");
   const [bots, setBots] = useState<Bot[]>([]);
   const [botLevel, setBotLevel] = useState<"简单" | "困难">("简单");
   const [copied, setCopied] = useState(false);
@@ -468,7 +478,7 @@ export default function Home() {
       {stage === "lobby" && onlineRoom?.settlement && dismissedSettlementAt !== onlineRoom.settlement.createdAt && <div className="settlement-backdrop"><section className="settlement-sheet"><div className="settlement-head"><div><span className="eyebrow">SESSION REPORT</span><h2>本场结算单</h2><p>共进行 {onlineRoom.settlement.hands} 手</p></div><button onClick={() => setDismissedSettlementAt(onlineRoom.settlement!.createdAt)}>关闭</button></div><div className="settlement-table"><div className="settlement-row heading"><span>玩家</span><span>最终筹码</span><span>补码</span><span>净输赢</span></div>{onlineRoom.settlement.players.map((player) => <div className="settlement-row" key={player.id}><strong>{player.name}{player.host ? " · 房主" : ""}{!player.human ? " · AI" : ""}</strong><span>{player.finalChips.toLocaleString()}</span><span>{player.purchasesCount} 次 / {player.purchasedChips.toLocaleString()}</span><b className={player.netChips >= 0 ? "profit" : "loss"}>{player.netChips >= 0 ? "+" : ""}{player.netChips.toLocaleString()}</b></div>)}</div><small>净输赢 = 最终筹码 − 初始 10,000 − 累计补码</small></section></div>}
 
       {stage === "table" && game && <section className="table-screen">
-        <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><div className="table-meta-actions">{onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局并返回大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}</div></div>
+        <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><div className="table-meta-actions"><button className="game-menu-button" onClick={() => setGameMenuOpen(true)}>局内菜单</button>{onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局并返回大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}</div></div>
         <div className="round-strip"><span className="live-dot" />{game.winner ? game.winner : actor ? `${actor.name} 正在行动` : "正在推进牌局"}
           {!game.winner && <div className={`turn-timer ${secondsLeft <= 10 ? "urgent" : ""}`}><div><i style={{ width: `${Math.min(100, secondsLeft / 60 * 100)}%` }} /></div><b>{secondsLeft}s</b></div>}
           <small>底池 {game.pot.toLocaleString()}</small></div>
@@ -507,10 +517,11 @@ export default function Home() {
             <button className="raise" onClick={() => heroAction("raise", clampedRaise)} disabled={actionPending || maximumRaise <= game.currentBet}>加注<strong>到 {clampedRaise.toLocaleString()}</strong></button>
           </div></>
           : <p className="thinking">{actor?.name ?? "系统"} 正在思考，牌局会自动继续…</p>}
-          {onlineRoom && <div className="chip-shop permanent-shop"><strong>筹码商店 <small>预购筹码仅在下一手生效</small></strong>{(onlineViewer?.queuedChips ?? 0) > 0 && <p>已预购：{onlineViewer?.queuedChips.toLocaleString()} 筹码</p>}<div>{[5000, 10000, 20000].map((amount) => <button key={amount} onClick={() => buyChips(amount)} disabled={actionPending}>＋{amount.toLocaleString()}</button>)}</div>{isSpectator && <button className="enter-table" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请入局，等待下一手" : "申请下一手入局"}</button>}</div>}
           {onlineError && <p className="table-error">{onlineError}</p>}
         </div>
       </section>}
+
+      {stage === "table" && gameMenuOpen && <div className="game-menu-backdrop"><section className="game-menu"><div className="game-menu-head"><h2>局内菜单</h2><button onClick={() => setGameMenuOpen(false)}>关闭</button></div><div className="game-menu-tabs"><button className={gameMenuTab === "shop" ? "active" : ""} onClick={() => setGameMenuTab("shop")}>补码商店</button><button className={gameMenuTab === "rules" ? "active" : ""} onClick={() => setGameMenuTab("rules")}>新手规则</button></div>{gameMenuTab === "shop" ? <div className="menu-shop"><h3>补码商店</h3><p>购买的筹码只在下一手生效，不会改变当前手筹码。</p>{onlineRoom ? <>{(onlineViewer?.queuedChips ?? 0) > 0 && <strong>已预购：{onlineViewer?.queuedChips.toLocaleString()} 筹码</strong>}<div>{[5000, 10000, 20000].map((amount) => <button key={amount} onClick={() => buyChips(amount)} disabled={actionPending}>＋{amount.toLocaleString()}</button>)}</div>{isSpectator && <button className="menu-enter" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请入局，等待下一手" : "申请下一手入局"}</button>}</> : <small>单机牌局不使用补码商店。</small>}</div> : <div className="rules-content"><h3>德州扑克简单规则</h3><p>每人会拿到两张只有自己能看到的手牌。牌桌再依次发出五张公共牌，从这七张牌中选出最强的五张组成最终牌型。</p><div className="rule-rounds"><span><b>翻牌前</b>拿到两张手牌</span><span><b>翻牌</b>发出三张公共牌</span><span><b>转牌</b>发出第四张公共牌</span><span><b>河牌</b>发出第五张公共牌</span></div><p><b>过牌</b>是不下注继续；<b>跟注</b>是补到当前金额；<b>加注</b>是提高金额；<b>弃牌</b>是放弃本手；<b>全下</b>是投入全部剩余筹码。</p><p>其他玩家全部弃牌时，最后未弃牌者直接获胜。多人坚持到最后则摊牌，牌型最大者赢得底池；牌型相同则平分。</p><h3>牌型大小</h3><div className="hand-rankings">{HAND_RANKINGS.map(([name, description], index) => <div key={name}><i>{index + 1}</i><strong>{name}</strong><span>{description}</span></div>)}</div><small>牌型从上到下、由大到小。同类牌型先比较主要点数，再比较剩余较大的单牌。</small></div>}</section></div>}
     </main>
   );
 }
