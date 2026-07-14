@@ -906,6 +906,8 @@
 
 /* Concept reconstruction · phase 3: hanging CRT action monitor and latest-action strip. */
 @media(min-width: 901px) {
+  .visual-characters { overflow: visible; }
+
   .visual-characters .round-strip {
     position: absolute;
     z-index: 34;
