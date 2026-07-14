@@ -996,7 +996,7 @@
   }
   .visual-characters .hand-log h3 { display: none; }
   .visual-characters .hand-log p {
-    display: flex;
+    display: none;
     height: 20%;
     min-height: 0;
     margin: 0;
@@ -1011,7 +1011,7 @@
     text-overflow: ellipsis;
     text-shadow: 0 0 5px rgba(121,186,145,.18);
   }
-  .visual-characters .hand-log p:nth-of-type(-n+4) { display: none; }
+  .visual-characters .hand-log p:nth-last-child(-n+5) { display: flex; }
   .visual-characters .hand-log p span {
     flex: 0 0 14px;
     color: #708579;
