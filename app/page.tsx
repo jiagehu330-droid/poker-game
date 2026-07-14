@@ -460,7 +460,8 @@ export default function Home() {
             <span className="cinema-pot">底池 <b>{game.pot.toLocaleString()}</b></span>
           </div>
           <div className="cinema-actions">
-            <button className="game-menu-button" onClick={() => setGameMenuOpen(true)}>☰ 局内菜单</button>
+            <button className="game-menu-button" onClick={() => setGameMenuOpen(true)}>☰ 菜单⌄</button>
+            <div className="cinema-wallet"><strong>◉ {(onlineViewer?.queuedChips ?? 0).toLocaleString()}</strong><small><i />{onlineViewer?.readyNextHand ? "下一手已申请" : "下一手补码"}</small></div>
             {onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局 / 大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}
           </div>
         </>}
