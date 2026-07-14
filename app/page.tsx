@@ -8,6 +8,7 @@ type Bot = { id: string; name: string; level: "简单" | "困难"; chips: number
 type Stage = "home" | "lobby" | "table";
 type Street = "preflop" | "flop" | "turn" | "river" | "showdown";
 type Action = "fold" | "check" | "call" | "raise";
+type VisualStyle = "classic" | "characters";
 type Card = { rank: number; label: string; suit: string; red: boolean };
 type Player = Bot & { human: boolean; host: boolean; folded: boolean; bet: number; committed?: number; lastAction: string; role: string; online?: boolean };
 type Game = {
@@ -198,6 +199,7 @@ export default function Home() {
   const [dismissedSettlementAt, setDismissedSettlementAt] = useState<number | null>(null);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [gameMenuTab, setGameMenuTab] = useState<"shop" | "rules">("shop");
+  const [visualStyle, setVisualStyle] = useState<VisualStyle>("classic");
   const [bots, setBots] = useState<Bot[]>([]);
   const [botLevel, setBotLevel] = useState<"简单" | "困难">("简单");
   const [copied, setCopied] = useState(false);
@@ -229,6 +231,16 @@ export default function Home() {
   const visibleCards = !game ? 0 : game.street === "preflop" ? 0 : game.street === "flop" ? 3 : game.street === "turn" ? 4 : 5;
   const currentRound = game ? (game.hand - 1) * 4 + STREET_INDEX[game.street] : 0;
   const timeBankReady = !!game && currentRound - (game.timeBankUsedAt.you ?? -99) >= 2;
+
+  useEffect(() => {
+    const savedStyle = window.localStorage.getItem("pocket-poker-visual-style");
+    if (savedStyle === "classic" || savedStyle === "characters") setVisualStyle(savedStyle);
+  }, []);
+
+  function changeVisualStyle(style: VisualStyle) {
+    setVisualStyle(style);
+    window.localStorage.setItem("pocket-poker-visual-style", style);
+  }
 
   useEffect(() => {
     if (onlineRoom || !actorId || actorHuman || game?.winner) return;
@@ -317,24 +329,7 @@ export default function Home() {
       if (latest.game) { setGame(latest.game); setStage("table"); }
       else if (latest.phase === "lobby") { setGame(null); setStage("lobby"); }
     }
-    if (!response.ok) throw new Error(result.error ?? "房间操作失败");
-    return result as { token?: string; room: OnlineRoom };
-  }
-
-  async function createOnlineRoom() {
-    try {
-      const result = await roomRequest({ action: "create", name: nickname });
-      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
-      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
-    } catch (error) { setOnlineError(error instanceof Error ? error.message : "创建失败"); }
-  }
-
-  async function joinOnlineRoom() {
-    try {
-      const result = await roomRequest({ action: "join", code: joinCode.trim().toUpperCase(), name: nickname });
-      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
-      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
-    } catch (error) { setOnlineError(error instanceof Error ? error.message : "加入失败"); }
+    if (!response.ok) throw new Err…261 tokens truncated…r.message : "加入失败"); }
   }
 
   async function updateNickname() {
@@ -477,14 +472,15 @@ export default function Home() {
 
       {stage === "lobby" && onlineRoom?.settlement && dismissedSettlementAt !== onlineRoom.settlement.createdAt && <div className="settlement-backdrop"><section className="settlement-sheet"><div className="settlement-head"><div><span className="eyebrow">SESSION REPORT</span><h2>本场结算单</h2><p>共进行 {onlineRoom.settlement.hands} 手</p></div><button onClick={() => setDismissedSettlementAt(onlineRoom.settlement!.createdAt)}>关闭</button></div><div className="settlement-table"><div className="settlement-row heading"><span>玩家</span><span>最终筹码</span><span>补码</span><span>净输赢</span></div>{onlineRoom.settlement.players.map((player) => <div className="settlement-row" key={player.id}><strong>{player.name}{player.host ? " · 房主" : ""}{!player.human ? " · AI" : ""}</strong><span>{player.finalChips.toLocaleString()}</span><span>{player.purchasesCount} 次 / {player.purchasedChips.toLocaleString()}</span><b className={player.netChips >= 0 ? "profit" : "loss"}>{player.netChips >= 0 ? "+" : ""}{player.netChips.toLocaleString()}</b></div>)}</div><small>净输赢 = 最终筹码 − 初始 10,000 − 累计补码</small></section></div>}
 
-      {stage === "table" && game && <section className="table-screen">
+      {stage === "table" && game && <section className={`table-screen visual-${visualStyle}`}>
         <div className="table-meta"><span>第 {game.hand} 手 · {STREET_NAME[game.street]}</span><div className="table-meta-actions"><button className="game-menu-button" onClick={() => setGameMenuOpen(true)}>局内菜单</button>{onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局并返回大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}</div></div>
         <div className="round-strip"><span className="live-dot" />{game.winner ? game.winner : actor ? `${actor.name} 正在行动` : "正在推进牌局"}
           {!game.winner && <div className={`turn-timer ${secondsLeft <= 10 ? "urgent" : ""}`}><div><i style={{ width: `${Math.min(100, secondsLeft / 60 * 100)}%` }} /></div><b>{secondsLeft}s</b></div>}
           <small>底池 {game.pot.toLocaleString()}</small></div>
         <div className="table-layout">
           <div className="poker-table">
-            {game.players.filter((player) => player.id !== "you").map((player, index) => <div className={`table-player seat-${index + 1} ${actor?.id === player.id ? "acting" : ""} ${player.folded ? "folded" : ""}`} key={player.id}>
+            {game.players.filter((player) => player.id !== "you").map((player, index) => <div className={`table-player seat-${index + 1} ${actor?.id === player.id ? "acting" : ""} ${player.folded ? "folded" : ""} ${player.online === false ? "offline-player" : ""}`} key={player.id}>
+              <div className={`character-portrait character-${index % 5}`} aria-hidden="true" />
               {player.role && <span className={`role role-${player.role.includes("BB") ? "bb" : player.role.includes("SB") ? "sb" : "d"}`}>{player.role}</span>}<div className={`mini-avatar ${player.online === false ? "offline" : ""}`}>{player.human ? "友" : "AI"}</div><strong>{player.name}{player.host && <i className="identity-tag host-tag">房主</i>}</strong><small>{player.online === false ? "离线" : player.chips.toLocaleString()}</small>
               <span className="last-action">{player.lastAction}</span>{!player.folded && (game.street === "showdown"
                 ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red-card" : "black-card"} key={cardIndex}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></b>)}</div>
@@ -521,7 +517,20 @@ export default function Home() {
         </div>
       </section>}
 
-      {stage === "table" && gameMenuOpen && <div className="game-menu-backdrop"><section className="game-menu"><div className="game-menu-head"><h2>局内菜单</h2><button onClick={() => setGameMenuOpen(false)}>关闭</button></div><div className="game-menu-tabs"><button className={gameMenuTab === "shop" ? "active" : ""} onClick={() => setGameMenuTab("shop")}>补码商店</button><button className={gameMenuTab === "rules" ? "active" : ""} onClick={() => setGameMenuTab("rules")}>新手规则</button></div>{gameMenuTab === "shop" ? <div className="menu-shop"><h3>补码商店</h3><p>购买的筹码只在下一手生效，不会改变当前手筹码。</p>{onlineRoom ? <>{(onlineViewer?.queuedChips ?? 0) > 0 && <strong>已预购：{onlineViewer?.queuedChips.toLocaleString()} 筹码</strong>}<div>{[5000, 10000, 20000].map((amount) => <button key={amount} onClick={() => buyChips(amount)} disabled={actionPending}>＋{amount.toLocaleString()}</button>)}</div>{isSpectator && <button className="menu-enter" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请入局，等待下一手" : "申请下一手入局"}</button>}</> : <small>单机牌局不使用补码商店。</small>}</div> : <div className="rules-content"><h3>德州扑克简单规则</h3><p>每人会拿到两张只有自己能看到的手牌。牌桌再依次发出五张公共牌，从这七张牌中选出最强的五张组成最终牌型。</p><div className="rule-rounds"><span><b>翻牌前</b>拿到两张手牌</span><span><b>翻牌</b>发出三张公共牌</span><span><b>转牌</b>发出第四张公共牌</span><span><b>河牌</b>发出第五张公共牌</span></div><p><b>过牌</b>是不下注继续；<b>跟注</b>是补到当前金额；<b>加注</b>是提高金额；<b>弃牌</b>是放弃本手；<b>全下</b>是投入全部剩余筹码。</p><p>其他玩家全部弃牌时，最后未弃牌者直接获胜。多人坚持到最后则摊牌，牌型最大者赢得底池；牌型相同则平分。</p><h3>牌型大小</h3><div className="hand-rankings">{HAND_RANKINGS.map(([name, description], index) => <div key={name}><i>{index + 1}</i><strong>{name}</strong><span>{description}</span></div>)}</div><small>牌型从上到下、由大到小。同类牌型先比较主要点数，再比较剩余较大的单牌。</small></div>}</section></div>}
+      {stage === "table" && gameMenuOpen && <div className="game-menu-backdrop">
+        <section className="game-menu">
+          <div className="game-menu-head"><h2>局内菜单</h2><button onClick={() => setGameMenuOpen(false)}>关闭</button></div>
+          <div className="visual-style-picker">
+            <div><span>牌桌风格</span><small>只影响你自己的显示，不影响其他玩家和牌局进度。</small></div>
+            <div className="visual-style-options">
+              <button className={visualStyle === "classic" ? "active" : ""} onClick={() => changeVisualStyle("classic")}><i className="classic-preview" /><strong>经典牌桌</strong><small>信息最清晰</small></button>
+              <button className={visualStyle === "characters" ? "active" : ""} onClick={() => changeVisualStyle("characters")}><i className="character-preview" /><strong>角色牌桌</strong><small>静止 MAD 风格</small></button>
+            </div>
+          </div>
+          <div className="game-menu-tabs"><button className={gameMenuTab === "shop" ? "active" : ""} onClick={() => setGameMenuTab("shop")}>补码商店</button><button className={gameMenuTab === "rules" ? "active" : ""} onClick={() => setGameMenuTab("rules")}>新手规则</button></div>
+          {gameMenuTab === "shop" ? <div className="menu-shop"><h3>补码商店</h3><p>购买的筹码只在下一手生效，不会改变当前手筹码。</p>{onlineRoom ? <>{(onlineViewer?.queuedChips ?? 0) > 0 && <strong>已预购：{onlineViewer?.queuedChips.toLocaleString()} 筹码</strong>}<div>{[5000, 10000, 20000].map((amount) => <button key={amount} onClick={() => buyChips(amount)} disabled={actionPending}>＋{amount.toLocaleString()}</button>)}</div>{isSpectator && <button className="menu-enter" onClick={enterNextHand} disabled={!onlineViewer?.queuedChips || onlineViewer?.readyNextHand || actionPending}>{onlineViewer?.readyNextHand ? "已申请入局，等待下一手" : "申请下一手入局"}</button>}</> : <small>单机牌局不使用补码商店。</small>}</div> : <div className="rules-content"><h3>德州扑克简单规则</h3><p>每人会拿到两张只有自己能看到的手牌。牌桌再依次发出五张公共牌，从这七张牌中选出最强的五张组成最终牌型。</p><div className="rule-rounds"><span><b>翻牌前</b>拿到两张手牌</span><span><b>翻牌</b>发出三张公共牌</span><span><b>转牌</b>发出第四张公共牌</span><span><b>河牌</b>发出第五张公共牌</span></div><p><b>过牌</b>是不下注继续；<b>跟注</b>是补到当前金额；<b>加注</b>是提高金额；<b>弃牌</b>是放弃本手；<b>全下</b>是投入全部剩余筹码。</p><p>其他玩家全部弃牌时，最后未弃牌者直接获胜。多人坚持到最后则摊牌，牌型最大者赢得底池；牌型相同则平分。</p><h3>牌型大小</h3><div className="hand-rankings">{HAND_RANKINGS.map(([name, description], index) => <div key={name}><i>{index + 1}</i><strong>{name}</strong><span>{description}</span></div>)}</div><small>牌型从上到下、由大到小。同类牌型先比较主要点数，再比较剩余较大的单牌。</small></div>}
+        </section>
+      </div>}
     </main>
   );
 }
