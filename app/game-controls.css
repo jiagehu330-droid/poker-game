@@ -727,3 +727,28 @@
     height: 560px;
   }
 }
+
+/* Phase 1 final: use the concept-derived room and table plate, not CSS geometry. */
+@media(min-width: 901px) {
+  .app-shell.visual-shell-characters {
+    background: #050707 url('/art/table-room-background-v2.webp') center center / cover no-repeat;
+  }
+  .app-shell.visual-shell-characters::before,
+  .app-shell.visual-shell-characters::after { display: none; }
+  .visual-characters .poker-table,
+  .visual-characters .poker-table::before,
+  .visual-characters .poker-table::after {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .visual-characters .poker-table {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: none;
+    border-radius: 0;
+  }
+  .visual-characters .poker-table::before,
+  .visual-characters .poker-table::after { display: none; }
+}
