@@ -448,10 +448,22 @@ export default function Home() {
   }
 
   return (
-    <main className={`app-shell stage-${stage}`}>
+    <main className={`app-shell stage-${stage} ${stage === "table" ? `visual-shell-${visualStyle}` : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={() => setStage("home")} aria-label="返回首页"><span className="brand-mark">♠</span><span>口袋牌局</span></button>
         {stage !== "home" && <span className="room-pill">房间 {roomCode}</span>}
+        {stage === "table" && game && visualStyle === "characters" && <>
+          <div className="cinema-status">
+            <span>第 <b>{game.hand}</b> 手</span><i />
+            <span>{STREET_NAME[game.street]}</span><i />
+            {!game.winner && <span className={`cinema-clock ${secondsLeft <= 10 ? "urgent" : ""}`}>◷ <b>{secondsLeft}s</b></span>}
+            <span className="cinema-pot">底池 <b>{game.pot.toLocaleString()}</b></span>
+          </div>
+          <div className="cinema-actions">
+            <button className="game-menu-button" onClick={() => setGameMenuOpen(true)}>☰ 局内菜单</button>
+            {onlineRoom ? (onlineRoom.isHost ? <button className="end-game" onClick={endOnlineGame} disabled={actionPending}>结束牌局 / 大厅</button> : <small>房主可结束牌局</small>) : <button onClick={() => setStage("lobby")}>返回房间</button>}
+          </div>
+        </>}
       </header>
 
       {stage === "home" && <section className="home-card">
