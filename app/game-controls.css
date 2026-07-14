@@ -909,8 +909,8 @@
   .visual-characters .round-strip {
     position: absolute;
     z-index: 34;
-    top: 8px;
-    left: 14px;
+    top: -12px;
+    left: calc(50% - 50vw + 14px);
     display: flex;
     width: min(65vw,1090px);
     min-height: 34px;
@@ -941,8 +941,8 @@
   .visual-characters .hand-log {
     position: absolute;
     z-index: 32;
-    top: 20px;
-    right: 7.6vw;
+    top: 0;
+    right: calc(50% - 50vw + 7.6vw);
     display: block;
     visibility: visible;
     pointer-events: auto;
@@ -1021,7 +1021,6 @@
 
 @media(min-width: 901px) and (max-width: 1180px) {
   .visual-characters .round-strip { width: calc(100vw - 330px); }
-  .visual-characters .hand-log { right: 4vw; }
 }
 
 /* Concept reconstruction · phase 4 preview: central pot and community cards. */
