@@ -207,7 +207,7 @@
 .visual-style-options button strong { align-self: end; font-size: 12px; }
 .visual-style-options button small { align-self: start; color: #75887e; font-size: 9px; }
 .classic-preview { background: radial-gradient(ellipse at center,#267c5c 0 46%,#3c2a20 47% 53%,#071c17 54%); }
-.character-preview { background: url('/art/poker-characters.png') center 21%/250% auto no-repeat, radial-gradient(ellipse at 50% 82%,#185d45 0 39%,#251d18 40% 45%,#080d0c 46%); }
+.character-preview { background: url('/art/poker-characters.webp') center 21%/250% auto no-repeat, radial-gradient(ellipse at 50% 82%,#185d45 0 39%,#251d18 40% 45%,#080d0c 46%); }
 
 .character-portrait { display: none; }
 
@@ -270,7 +270,7 @@
     position: absolute;
     inset: 18px 0 0;
     z-index: 1;
-    background-image: url('/art/poker-characters.png');
+    background-image: url('/art/poker-characters.webp');
     background-repeat: no-repeat;
     background-size: 500% auto;
     background-position-y: 0;
@@ -357,7 +357,7 @@
     gap: 0;
     padding: 38px 0 0;
     border: 0;
-    background: url('/art/first-person-hands.png') center bottom/270px auto no-repeat;
+    background: url('/art/first-person-hands.webp') center bottom/270px auto no-repeat;
     box-shadow: none;
     pointer-events: none;
   }

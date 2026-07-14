@@ -329,7 +329,24 @@ export default function Home() {
       if (latest.game) { setGame(latest.game); setStage("table"); }
       else if (latest.phase === "lobby") { setGame(null); setStage("lobby"); }
     }
-    if (!response.ok) throw new Err…261 tokens truncated…r.message : "加入失败"); }
+    if (!response.ok) throw new Error(result.error ?? "房间操作失败");
+    return result as { token?: string; room: OnlineRoom };
+  }
+
+  async function createOnlineRoom() {
+    try {
+      const result = await roomRequest({ action: "create", name: nickname });
+      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
+      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
+    } catch (error) { setOnlineError(error instanceof Error ? error.message : "创建失败"); }
+  }
+
+  async function joinOnlineRoom() {
+    try {
+      const result = await roomRequest({ action: "join", code: joinCode.trim().toUpperCase(), name: nickname });
+      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
+      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
+    } catch (error) { setOnlineError(error instanceof Error ? error.message : "加入失败"); }
   }
 
   async function updateNickname() {
