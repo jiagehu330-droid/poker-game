@@ -940,7 +940,7 @@
 
   .visual-characters .hand-log {
     position: absolute;
-    z-index: 32;
+    z-index: 42;
     top: 0;
     right: calc(50% - 50vw + 7.6vw);
     display: block;
@@ -975,7 +975,7 @@
     height: 70px;
     border-radius: 2px 2px 0 0;
     background: linear-gradient(90deg,#090a0a,#363a38 45%,#0a0b0b);
-    box-shadow: -77px 0 0 #171918,0 -3px 0 #050606,-77px -3px 0 #050606;
+    box-shadow: -77px 0 0 #272b29,0 -3px 0 #050606,-77px -3px 0 #050606;
   }
   .visual-characters .hand-log::after {
     content: "";
