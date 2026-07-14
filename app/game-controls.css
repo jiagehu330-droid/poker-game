@@ -971,11 +971,13 @@
     z-index: 0;
     top: -78px;
     right: 35px;
-    width: 4px;
+    width: 81px;
     height: 70px;
     border-radius: 2px 2px 0 0;
-    background: linear-gradient(90deg,#090a0a,#363a38 45%,#0a0b0b);
-    box-shadow: -77px 0 0 #272b29,0 -3px 0 #050606,-77px -3px 0 #050606;
+    background:
+      linear-gradient(90deg,#050606,#555b57 45%,#121514 72%,#050606) left / 4px 100% no-repeat,
+      linear-gradient(90deg,#050606,#555b57 45%,#121514 72%,#050606) right / 4px 100% no-repeat;
+    filter: drop-shadow(0 -3px 0 #050606);
   }
   .visual-characters .hand-log::after {
     content: "";
