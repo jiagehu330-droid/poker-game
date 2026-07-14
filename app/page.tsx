@@ -526,7 +526,14 @@ export default function Home() {
               {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red-card" : "black-card"}`} key={index}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></div>)}
             </div> : <div className="hero-seat spectator-seat"><div className="hero-info"><strong>观战席</strong><span>等待下一手进场</span></div></div>}
           </div>
-          <aside className="hand-log"><h3>本手行动</h3>{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</aside>
+          <aside className="hand-log" aria-label="鏈墜琛屽姩">
+            <span className="crt-rods" aria-hidden="true"><i /><i /></span>
+            <div className="crt-face">
+              <div className="crt-glass">{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</div>
+              <span className="crt-controls" aria-hidden="true"><i /><i /><i /></span>
+            </div>
+            <span className="crt-side" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+          </aside>
         </div>
         <div className="action-panel">
           {game.winner ? <><p className="result-text">{game.winner}</p><button className="primary next-round" onClick={nextHand} disabled={!!onlineRoom && !onlineRoom.isHost}>{onlineRoom && !onlineRoom.isHost ? "等待房主开始下一手" : `开始第 ${game.hand + 1} 手 →`}</button></>
