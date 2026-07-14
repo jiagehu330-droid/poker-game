@@ -329,7 +329,50 @@ export default function Home() {
       if (latest.game) { setGame(latest.game); setStage("table"); }
       else if (latest.phase === "lobby") { setGame(null); setStage("lobby"); }
     }
-    if (!response.ok) throw new Err…569 tokens truncated…function endOnlineGame() {
+    if (!response.ok) throw new Error(result.error ?? "房间操作失败");
+    return result as { token?: string; room: OnlineRoom };
+  }
+
+  async function createOnlineRoom() {
+    try {
+      const result = await roomRequest({ action: "create", name: nickname });
+      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
+      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
+    } catch (error) { setOnlineError(error instanceof Error ? error.message : "创建失败"); }
+  }
+
+  async function joinOnlineRoom() {
+    try {
+      const result = await roomRequest({ action: "join", code: joinCode.trim().toUpperCase(), name: nickname });
+      setRoomCode(result.room.code); setRoomToken(result.token ?? ""); setOnlineRoom(result.room); setStage("lobby");
+      window.localStorage.setItem("pocket-poker-session", JSON.stringify({ code: result.room.code, token: result.token }));
+    } catch (error) { setOnlineError(error instanceof Error ? error.message : "加入失败"); }
+  }
+
+  async function updateNickname() {
+    if (!onlineRoom) return;
+    try { const result = await roomRequest({ action: "updateName", code: roomCode, token: roomToken, name: nickname }); setOnlineRoom(result.room); }
+    catch (error) { setOnlineError(error instanceof Error ? error.message : "修改失败"); }
+  }
+
+  async function addBot() {
+    if (onlineRoom) {
+      try { const result = await roomRequest({ action: "addBot", code: roomCode, token: roomToken, level: botLevel }); setOnlineRoom(result.room); }
+      catch (error) { setOnlineError(error instanceof Error ? error.message : "添加失败"); }
+      return;
+    }
+    if (bots.length >= 5) return;
+    setBots((current) => [...current, { id: `bot-${Date.now()}`, name: BOT_NAMES[current.length], level: botLevel, chips: 10000 }]);
+  }
+
+  async function removeSeat(playerId: string) {
+    if (onlineRoom) {
+      try { const result = await roomRequest({ action: "removePlayer", code: roomCode, token: roomToken, playerId }); setOnlineRoom(result.room); }
+      catch (error) { setOnlineError(error instanceof Error ? error.message : "移除失败"); }
+    } else setBots(bots.filter((bot) => bot.id !== playerId));
+  }
+
+  async function endOnlineGame() {
     if (!onlineRoom?.isHost || !window.confirm("结束当前牌局，让所有玩家返回大厅？")) return;
     if (actionPending) return;
     setActionPending(true);
@@ -473,7 +516,7 @@ export default function Home() {
                 ? <div className="revealed-cards">{game.holes[player.id].map((card, cardIndex) => <b className={card.red ? "red-card" : "black-card"} key={cardIndex}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></b>)}</div>
                 : <div className="card-backs"><i /><i /></div>)}
             </div>)}
-            <div className="pot"><small>POT</small><i className="pot-chips" aria-hidden="true" /><strong>{game.pot.toLocaleString()}</strong></div>
+            <div className="pot"><small>底池</small><strong>{game.pot.toLocaleString()}</strong></div>
             <div className="community">{game.board.map((card, index) => index < visibleCards
               ? <b key={index} className={card.red ? "red" : ""}>{card.label}<span>{card.suit}</span></b>
               : <em key={index} />)}</div>
