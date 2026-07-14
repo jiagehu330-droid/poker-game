@@ -968,11 +968,11 @@
   .visual-characters .hand-log::before {
     content: "";
     position: absolute;
-    z-index: -2;
-    top: -42px;
+    z-index: 0;
+    top: -78px;
     right: 35px;
     width: 4px;
-    height: 34px;
+    height: 70px;
     border-radius: 2px 2px 0 0;
     background: linear-gradient(90deg,#090a0a,#363a38 45%,#0a0b0b);
     box-shadow: -77px 0 0 #171918,0 -3px 0 #050606,-77px -3px 0 #050606;
@@ -997,6 +997,8 @@
   .visual-characters .hand-log h3 { display: none; }
   .visual-characters .hand-log p {
     display: none;
+    position: relative;
+    z-index: 1;
     height: 20%;
     min-height: 0;
     margin: 0;
