@@ -526,7 +526,7 @@ export default function Home() {
               {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red-card" : "black-card"}`} key={index}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></div>)}
             </div> : <div className="hero-seat spectator-seat"><div className="hero-info"><strong>观战席</strong><span>等待下一手进场</span></div></div>}
           </div>
-          <aside className="hand-log" aria-label="鏈墜琛屽姩">
+          <aside className="hand-log" aria-label="本手行动">
             <span className="crt-rods" aria-hidden="true"><i /><i /></span>
             <div className="crt-face">
               <div className="crt-glass">{game.log.slice(-9).map((line, index) => <p key={`${line}-${index}`}><span>{index + 1}</span>{line}</p>)}</div>
