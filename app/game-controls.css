@@ -602,3 +602,128 @@
   .visual-style-options button { min-height: 62px; grid-template-columns: 46px 1fr; }
   .visual-style-options button i { width: 46px; height: 42px; }
 }
+
+/* Concept reconstruction · phase 1: lock the room depth and table silhouette first. */
+@media(min-width: 901px) {
+  .app-shell.visual-shell-characters {
+    position: relative;
+    height: 100svh;
+    min-height: 720px;
+    overflow: hidden;
+    isolation: isolate;
+    padding: 0;
+    background:
+      radial-gradient(ellipse 78% 48% at 50% 101%,rgba(16,48,39,.2),transparent 70%),
+      radial-gradient(ellipse 62% 45% at 50% -8%,rgba(45,55,52,.22),transparent 68%),
+      linear-gradient(180deg,#0b0f10 0%,#080b0c 40%,#030606 100%);
+  }
+  .app-shell.visual-shell-characters::before {
+    content: "";
+    position: absolute;
+    z-index: -2;
+    inset: 58px 0 0;
+    pointer-events: none;
+    background:
+      linear-gradient(106deg,transparent 0 9%,rgba(202,215,208,.024) 9.15% 9.35%,transparent 9.55% 28%,rgba(202,215,208,.019) 28.15% 28.35%,transparent 28.55% 70%,rgba(202,215,208,.018) 70.15% 70.35%,transparent 70.55% 90%,rgba(202,215,208,.022) 90.15% 90.35%,transparent 90.55%),
+      repeating-linear-gradient(90deg,transparent 0 19.8%,rgba(255,255,255,.012) 20%,transparent 20.2% 39.8%,rgba(255,255,255,.01) 40%,transparent 40.2%);
+    opacity: .9;
+  }
+  .app-shell.visual-shell-characters::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: 50%;
+    top: 58px;
+    width: min(1180px,72vw);
+    height: 420px;
+    transform: translateX(-50%);
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 0%,rgba(199,213,205,.045),transparent 67%);
+    filter: blur(1px);
+  }
+
+  .visual-shell-characters .topbar {
+    width: 100%;
+    max-width: none;
+    height: 58px;
+    padding: 0 15px;
+    background: rgba(5,7,7,.68);
+    border-bottom: 1px solid rgba(195,153,84,.28);
+    box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  }
+  .visual-shell-characters .cinema-status,
+  .visual-shell-characters .cinema-actions { visibility: hidden; }
+
+  .visual-characters {
+    width: 100%;
+    max-width: none;
+    height: calc(100svh - 58px);
+    min-height: 662px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  .visual-characters::before { display: none; }
+  .visual-characters .table-meta,
+  .visual-characters .round-strip { display: none; }
+  .visual-characters .table-layout {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .visual-characters .poker-table {
+    position: absolute;
+    z-index: 2;
+    top: 282px;
+    left: 50%;
+    width: calc(100vw + 86px);
+    max-width: none;
+    height: 730px;
+    min-height: 0;
+    margin: 0;
+    transform: translateX(-50%);
+    border: 24px solid transparent;
+    border-radius: 50% 50% 48% 48% / 22% 22% 20% 20%;
+    background:
+      radial-gradient(ellipse 82% 70% at 50% 40%,rgba(12,64,50,.56),transparent 68%) padding-box,
+      radial-gradient(ellipse at 50% 48%,#08382d 0%,#062c24 58%,#041c18 100%) padding-box,
+      repeating-linear-gradient(96deg,#0e0d0d 0 14px,#24211f 15px 31px,#171514 32px 46px,#302922 47px 58px,#111010 59px 71px) border-box;
+    box-shadow:
+      inset 0 0 0 2px rgba(213,178,117,.12),
+      inset 0 0 150px rgba(0,0,0,.48),
+      0 0 0 3px #060707,
+      0 28px 74px rgba(0,0,0,.78);
+  }
+  .visual-characters .poker-table::before {
+    content: "";
+    position: absolute;
+    z-index: 30;
+    inset: -17px;
+    pointer-events: none;
+    border: 1px solid rgba(208,173,111,.13);
+    border-radius: inherit;
+    box-shadow: inset 0 1px rgba(255,255,255,.035),0 1px rgba(0,0,0,.8);
+  }
+  .visual-characters .poker-table::after {
+    inset: 5px;
+    border: 1px solid rgba(219,187,126,.075);
+    box-shadow: inset 0 0 58px rgba(0,0,0,.38);
+  }
+
+  /* Later batches are intentionally hidden so this geometry can be approved in isolation. */
+  .visual-characters .table-player,
+  .visual-characters .pot,
+  .visual-characters .community,
+  .visual-characters .hero-seat,
+  .visual-characters .hand-log,
+  .visual-characters .action-panel { visibility: hidden; pointer-events: none; }
+}
+
+@media(min-width: 901px) and (max-height: 820px) {
+  .visual-characters .poker-table {
+    top: 235px;
+    height: 680px;
+  }
+}
