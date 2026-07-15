@@ -523,7 +523,7 @@ export default function Home() {
             {hero ? <div className={`hero-seat ${isHeroTurn ? "acting" : ""} ${hero.folded ? "folded" : ""}`}>
               {hero?.role && <span className={`role role-${hero.role.includes("BB") ? "bb" : hero.role.includes("SB") ? "sb" : "d"}`}>{hero.role}</span>}
               <div className="hero-info"><strong>{hero?.name}{hero?.host && <i className="identity-tag host-tag">房主</i>}<i className="identity-tag self-tag">你</i></strong><small>{hero?.chips.toLocaleString()}</small><span>{hero?.lastAction}</span></div>
-              {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card ${card.red ? "red-card" : "black-card"}`} key={index}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></div>)}
+              {!hero?.folded && game.holes.you.map((card, index) => <div className={`hole-card hole-card-${index === 0 ? "left" : "right"} ${card.red ? "red-card" : "black-card"}`} key={index}>{card.label}<span className={card.red ? "red-suit" : "black-suit"}>{card.suit}</span></div>)}
             </div> : <div className="hero-seat spectator-seat"><div className="hero-info"><strong>观战席</strong><span>等待下一手进场</span></div></div>}
           </div>
           <aside className="hand-log" aria-label="本手行动">
