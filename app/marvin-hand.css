@@ -1,6 +1,9 @@
 /* Marvin first-person hand model with live, data-driven hole cards. */
 @media(min-width: 901px) {
   .visual-characters .hero-seat {
+    z-index: 40;
+    visibility: visible;
+    pointer-events: none;
     width: 540px;
     height: 304px;
     bottom: -42px;
