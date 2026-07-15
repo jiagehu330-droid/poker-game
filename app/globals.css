@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./game-controls.css";
+@import "./marvin-hand.css";
 
 :root { --ink:#f5f0e4; --muted:#9ca89f; --green:#0a2b22; --green2:#103d30; --felt:#155b43; --gold:#e5b85a; --line:rgba(255,255,255,.1); }
 *{box-sizing:border-box} html,body{margin:0;min-height:100%;background:#071d18;color:var(--ink);font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif} button,input{font:inherit} button{cursor:pointer}
